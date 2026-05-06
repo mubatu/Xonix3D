@@ -74,7 +74,7 @@ public sealed class BallController : MonoBehaviour
 
     private void Update()
     {
-        if (gameManager != null && gameManager.IsGameOver)
+        if (gameManager != null && gameManager.IsGameplayStopped)
         {
             return;
         }

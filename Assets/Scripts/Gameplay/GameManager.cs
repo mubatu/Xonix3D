@@ -8,13 +8,21 @@ public sealed class GameManager : MonoBehaviour
 
     [Header("State")]
     [SerializeField] private int startingLives = 3;
+    [SerializeField] private int levelNumber = 1;
+    [SerializeField] private float requiredCapturePercentage = 75f;
 
     private int lives;
     private bool isGameOver;
+    private bool isLevelComplete;
+    private float capturedPercentage;
     private int lastDeathFrame = -1;
+    private GUIStyle hudStyle;
+    private GUIStyle messageStyle;
 
     public int Lives => lives;
     public bool IsGameOver => isGameOver;
+    public bool IsLevelComplete => isLevelComplete;
+    public bool IsGameplayStopped => isGameOver || isLevelComplete;
 
     private void Awake()
     {
@@ -29,11 +37,33 @@ public sealed class GameManager : MonoBehaviour
         }
 
         lives = startingLives;
+        capturedPercentage = territoryManager != null ? territoryManager.CapturedPercentage : 0f;
+    }
+
+    private void OnGUI()
+    {
+        EnsureGuiStyles();
+
+        string hudText =
+            $"Lives: {lives}\n"
+            + $"Level: {levelNumber}\n"
+            + $"Captured: {Mathf.RoundToInt(capturedPercentage)}% / {Mathf.RoundToInt(requiredCapturePercentage)}%";
+
+        GUI.Label(new Rect(20f, 20f, 360f, 120f), hudText, hudStyle);
+
+        if (isLevelComplete)
+        {
+            DrawCenteredMessage("Level Complete!");
+        }
+        else if (isGameOver)
+        {
+            DrawCenteredMessage("Game Over");
+        }
     }
 
     public void HandlePlayerDeath()
     {
-        if (isGameOver || lastDeathFrame == Time.frameCount)
+        if (IsGameplayStopped || lastDeathFrame == Time.frameCount)
         {
             return;
         }
@@ -52,5 +82,51 @@ public sealed class GameManager : MonoBehaviour
         }
 
         Debug.Log($"Player died. Lives remaining: {lives}");
+    }
+
+    public void HandleCaptureUpdated(float newCapturedPercentage)
+    {
+        if (IsGameplayStopped)
+        {
+            return;
+        }
+
+        capturedPercentage = newCapturedPercentage;
+        if (capturedPercentage < requiredCapturePercentage)
+        {
+            return;
+        }
+
+        isLevelComplete = true;
+        territoryManager?.CancelTemporaryPath();
+        Debug.Log("Level Complete!");
+    }
+
+    private void EnsureGuiStyles()
+    {
+        if (hudStyle != null && messageStyle != null)
+        {
+            return;
+        }
+
+        hudStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 24
+        };
+        hudStyle.normal.textColor = Color.white;
+
+        messageStyle = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 48,
+            fontStyle = FontStyle.Bold
+        };
+        messageStyle.normal.textColor = Color.white;
+    }
+
+    private void DrawCenteredMessage(string message)
+    {
+        Rect rect = new Rect(0f, Screen.height * 0.4f, Screen.width, 100f);
+        GUI.Label(rect, message, messageStyle);
     }
 }

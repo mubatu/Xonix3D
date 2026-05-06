@@ -13,6 +13,7 @@ public sealed class TerritoryManager : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private GridManager gridManager;
+    [SerializeField] private GameManager gameManager;
     [SerializeField] private List<BallController> balls = new();
 
     private readonly List<Vector2Int> temporaryPathCells = new();
@@ -30,8 +31,14 @@ public sealed class TerritoryManager : MonoBehaviour
             gridManager = FindFirstObjectByType<GridManager>();
         }
 
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+
         RefreshBallReferencesIfNeeded();
         capturedPercentage = CalculateCapturedPercentage();
+        gameManager?.HandleCaptureUpdated(capturedPercentage);
     }
 
     public void HandlePlayerEnteredCell(Vector2Int cell)
@@ -71,6 +78,7 @@ public sealed class TerritoryManager : MonoBehaviour
         temporaryPathCells.Clear();
         isDrawing = false;
         capturedPercentage = CalculateCapturedPercentage();
+        gameManager?.HandleCaptureUpdated(capturedPercentage);
     }
 
     private void StartDrawing(Vector2Int cell)
@@ -116,6 +124,7 @@ public sealed class TerritoryManager : MonoBehaviour
         temporaryPathCells.Clear();
         isDrawing = false;
         capturedPercentage = CalculateCapturedPercentage();
+        gameManager?.HandleCaptureUpdated(capturedPercentage);
         Debug.Log($"Captured: {Mathf.RoundToInt(capturedPercentage)}%");
     }
 

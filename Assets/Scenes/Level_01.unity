@@ -152,6 +152,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   gridManager: {fileID: 838259489}
+  gameManager: {fileID: 1078400845}
+  balls: []
 --- !u!4 &553481387
 Transform:
   m_ObjectHideFlags: 0
@@ -599,6 +601,8 @@ MonoBehaviour:
   playerController: {fileID: 1401430782}
   territoryManager: {fileID: 553481386}
   startingLives: 3
+  levelNumber: 1
+  requiredCapturePercentage: 75
 --- !u!4 &1078400846
 Transform:
   m_ObjectHideFlags: 0
