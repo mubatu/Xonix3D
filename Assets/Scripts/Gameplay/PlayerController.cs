@@ -4,6 +4,7 @@ public sealed class PlayerController : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private GridManager gridManager;
+    [SerializeField] private TerritoryManager territoryManager;
 
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 7f;
@@ -25,9 +26,15 @@ public sealed class PlayerController : MonoBehaviour
             gridManager = FindFirstObjectByType<GridManager>();
         }
 
+        if (territoryManager == null)
+        {
+            territoryManager = FindFirstObjectByType<TerritoryManager>();
+        }
+
         currentCell = spawnCell;
         targetCell = spawnCell;
         transform.position = GetPlayerWorldPosition(spawnCell);
+        territoryManager?.HandlePlayerEnteredCell(currentCell);
     }
 
     private void Update()
@@ -151,6 +158,11 @@ public sealed class PlayerController : MonoBehaviour
             return;
         }
 
+        if (gridManager.GetCellState(nextCell) == CellState.TemporaryPath)
+        {
+            return;
+        }
+
         targetCell = nextCell;
         activeDirection = direction;
         isMoving = true;
@@ -173,6 +185,7 @@ public sealed class PlayerController : MonoBehaviour
         transform.position = targetPosition;
         currentCell = targetCell;
         isMoving = false;
+        territoryManager?.HandlePlayerEnteredCell(currentCell);
     }
 
     private Vector3 GetPlayerWorldPosition(Vector2Int cell)
