@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public sealed class GameHud : MonoBehaviour
@@ -14,9 +15,13 @@ public sealed class GameHud : MonoBehaviour
     [SerializeField] private Color lifeOnColor = new Color(0.2f, 0.58f, 1f, 1f);
     [SerializeField] private Color lifeOffColor = new Color(0.16f, 0.18f, 0.2f, 0.9f);
     [SerializeField] private Color messagePanelColor = new Color(0.02f, 0.04f, 0.05f, 0.86f);
+    [SerializeField] private Color buttonColor = new Color(0.16f, 0.38f, 0.72f, 0.96f);
+    [SerializeField] private Color secondaryButtonColor = new Color(0.14f, 0.18f, 0.2f, 0.96f);
+    [SerializeField] private Color buttonTextColor = Color.white;
 
     private Canvas canvas;
     private Font font;
+    private GameObject statusPanel;
     private Text levelText;
     private Text captureText;
     private Image captureFill;
@@ -24,6 +29,11 @@ public sealed class GameHud : MonoBehaviour
     private GameObject messagePanel;
     private Text messageTitleText;
     private Text messagePromptText;
+    private Button startButton;
+    private Button retryButton;
+    private Button nextLevelButton;
+    private Button mainMenuButton;
+    private Button quitButton;
 
     private void Awake()
     {
@@ -44,8 +54,10 @@ public sealed class GameHud : MonoBehaviour
     private void BuildHud()
     {
         canvas = CreateCanvas();
+        EnsureEventSystemExists();
 
         RectTransform topPanel = CreatePanel("Status Panel", canvas.transform, panelColor);
+        statusPanel = topPanel.gameObject;
         topPanel.anchorMin = new Vector2(0f, 1f);
         topPanel.anchorMax = new Vector2(0f, 1f);
         topPanel.pivot = new Vector2(0f, 1f);
@@ -105,13 +117,28 @@ public sealed class GameHud : MonoBehaviour
         panelRect.anchorMax = new Vector2(0.5f, 0.5f);
         panelRect.pivot = new Vector2(0.5f, 0.5f);
         panelRect.anchoredPosition = Vector2.zero;
-        panelRect.sizeDelta = new Vector2(520f, 190f);
+        panelRect.sizeDelta = new Vector2(600f, 330f);
 
         messageTitleText = CreateText("State Title", panelRect, 46, FontStyle.Bold, TextAnchor.MiddleCenter);
-        SetRect(messageTitleText.rectTransform, new Vector2(0f, 36f), new Vector2(480f, 70f), new Vector2(0.5f, 0.5f));
+        SetRect(messageTitleText.rectTransform, new Vector2(0f, 102f), new Vector2(540f, 70f), new Vector2(0.5f, 0.5f));
 
         messagePromptText = CreateText("State Prompt", panelRect, 24, FontStyle.Normal, TextAnchor.MiddleCenter);
-        SetRect(messagePromptText.rectTransform, new Vector2(0f, -42f), new Vector2(480f, 42f), new Vector2(0.5f, 0.5f));
+        SetRect(messagePromptText.rectTransform, new Vector2(0f, 34f), new Vector2(520f, 50f), new Vector2(0.5f, 0.5f));
+
+        startButton = CreateButton("Start Button", "START", panelRect, new Vector2(0f, -44f), buttonColor);
+        startButton.onClick.AddListener(gameManager.StartGame);
+
+        retryButton = CreateButton("Retry Button", "RETRY", panelRect, new Vector2(-138f, -44f), buttonColor);
+        retryButton.onClick.AddListener(gameManager.RestartLevel);
+
+        nextLevelButton = CreateButton("Next Level Button", "NEXT LEVEL", panelRect, new Vector2(-138f, -44f), buttonColor);
+        nextLevelButton.onClick.AddListener(gameManager.StartNextLevelPlaceholder);
+
+        mainMenuButton = CreateButton("Main Menu Button", "MAIN MENU", panelRect, new Vector2(0f, -112f), secondaryButtonColor);
+        mainMenuButton.onClick.AddListener(gameManager.ReturnToMainMenu);
+
+        quitButton = CreateButton("Quit Button", "QUIT", panelRect, new Vector2(138f, -44f), secondaryButtonColor);
+        quitButton.onClick.AddListener(gameManager.QuitGame);
     }
 
     private void RefreshHud()
@@ -135,15 +162,44 @@ public sealed class GameHud : MonoBehaviour
             lifePips[i].color = i < gameManager.Lives ? lifeOnColor : lifeOffColor;
         }
 
-        bool showMessage = gameManager.IsGameOver || gameManager.IsLevelComplete;
+        bool showMessage = gameManager.IsMainMenuActive || gameManager.IsGameOver || gameManager.IsLevelComplete;
+        statusPanel.SetActive(gameManager.HasStarted);
         messagePanel.SetActive(showMessage);
         if (!showMessage)
         {
             return;
         }
 
-        messageTitleText.text = gameManager.IsLevelComplete ? "LEVEL COMPLETE" : "GAME OVER";
-        messagePromptText.text = "Press R to Restart";
+        messageTitleText.text = GetMessageTitle();
+        messagePromptText.text = GetMessagePrompt();
+        startButton.gameObject.SetActive(gameManager.IsMainMenuActive);
+        retryButton.gameObject.SetActive(gameManager.IsGameOver);
+        nextLevelButton.gameObject.SetActive(gameManager.IsLevelComplete);
+        mainMenuButton.gameObject.SetActive(gameManager.IsGameOver || gameManager.IsLevelComplete);
+        quitButton.gameObject.SetActive(true);
+        quitButton.GetComponent<RectTransform>().anchoredPosition = gameManager.IsMainMenuActive
+            ? new Vector2(0f, -112f)
+            : new Vector2(138f, -44f);
+    }
+
+    private string GetMessageTitle()
+    {
+        if (gameManager.IsMainMenuActive)
+        {
+            return "XONIX 3D";
+        }
+
+        return gameManager.IsLevelComplete ? "LEVEL COMPLETE" : "GAME OVER";
+    }
+
+    private string GetMessagePrompt()
+    {
+        if (gameManager.IsMainMenuActive)
+        {
+            return "Press Enter or Start";
+        }
+
+        return gameManager.IsLevelComplete ? "Area secured" : "Press R or Retry";
     }
 
     private Canvas CreateCanvas()
@@ -200,6 +256,33 @@ public sealed class GameHud : MonoBehaviour
         return text;
     }
 
+    private Button CreateButton(string objectName, string label, Transform parent, Vector2 anchoredPosition, Color color)
+    {
+        GameObject buttonObject = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        buttonObject.transform.SetParent(parent, false);
+
+        RectTransform rectTransform = buttonObject.GetComponent<RectTransform>();
+        SetRect(rectTransform, anchoredPosition, new Vector2(230f, 50f), new Vector2(0.5f, 0.5f));
+
+        Image image = buttonObject.GetComponent<Image>();
+        image.color = color;
+
+        Button button = buttonObject.GetComponent<Button>();
+        ColorBlock colors = button.colors;
+        colors.normalColor = color;
+        colors.highlightedColor = Brighten(color, 1.22f);
+        colors.pressedColor = Brighten(color, 0.78f);
+        colors.selectedColor = Brighten(color, 1.12f);
+        colors.disabledColor = new Color(color.r, color.g, color.b, 0.45f);
+        button.colors = colors;
+
+        Text buttonText = CreateText($"{objectName} Text", rectTransform, 22, FontStyle.Bold, TextAnchor.MiddleCenter);
+        buttonText.text = label;
+        buttonText.color = buttonTextColor;
+        SetRect(buttonText.rectTransform, Vector2.zero, rectTransform.sizeDelta, new Vector2(0.5f, 0.5f));
+        return button;
+    }
+
     private RectTransform CreateRect(string objectName, Transform parent)
     {
         GameObject rectObject = new GameObject(objectName, typeof(RectTransform));
@@ -231,5 +314,25 @@ public sealed class GameHud : MonoBehaviour
         }
 
         return Font.CreateDynamicFontFromOSFont(new[] { "Arial", "Helvetica", "Verdana" }, 18);
+    }
+
+    private static void EnsureEventSystemExists()
+    {
+        if (FindFirstObjectByType<EventSystem>() != null)
+        {
+            return;
+        }
+
+        new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+    }
+
+    private static Color Brighten(Color color, float multiplier)
+    {
+        return new Color(
+            Mathf.Clamp01(color.r * multiplier),
+            Mathf.Clamp01(color.g * multiplier),
+            Mathf.Clamp01(color.b * multiplier),
+            color.a
+        );
     }
 }

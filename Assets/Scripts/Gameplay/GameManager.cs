@@ -19,6 +19,7 @@ public sealed class GameManager : MonoBehaviour
     [SerializeField] private float deathPopScale = 1.35f;
 
     private int lives;
+    private bool hasStarted;
     private bool isGameOver;
     private bool isLevelComplete;
     private bool isRespawning;
@@ -30,9 +31,11 @@ public sealed class GameManager : MonoBehaviour
     public int Lives => lives;
     public float CapturedPercentage => capturedPercentage;
     public float RequiredCapturePercentage => requiredCapturePercentage;
+    public bool HasStarted => hasStarted;
     public bool IsGameOver => isGameOver;
     public bool IsLevelComplete => isLevelComplete;
-    public bool IsGameplayStopped => isGameOver || isLevelComplete;
+    public bool IsMainMenuActive => !hasStarted && !isGameOver && !isLevelComplete;
+    public bool IsGameplayStopped => !hasStarted || isGameOver || isLevelComplete;
     public bool IsPlayerControlLocked => IsGameplayStopped || isRespawning;
 
     private void Awake()
@@ -54,7 +57,12 @@ public sealed class GameManager : MonoBehaviour
 
     private void Update()
     {
-        if (IsGameplayStopped && Input.GetKeyDown(KeyCode.R))
+        if (IsMainMenuActive && Input.GetKeyDown(KeyCode.Return))
+        {
+            StartGame();
+        }
+
+        if ((isGameOver || isLevelComplete) && Input.GetKeyDown(KeyCode.R))
         {
             RestartLevel();
         }
@@ -70,6 +78,11 @@ public sealed class GameManager : MonoBehaviour
         capturedPercentage = territoryManager != null ? territoryManager.CapturedPercentage : 0f;
     }
 
+    public void StartGame()
+    {
+        RestartLevel();
+    }
+
     public void HandlePlayerDeath()
     {
         if (IsGameplayStopped || isRespawning || lastDeathFrame == Time.frameCount)
@@ -83,6 +96,7 @@ public sealed class GameManager : MonoBehaviour
 
     public void RestartLevel()
     {
+        hasStarted = true;
         RefreshBallReferencesIfNeeded();
         StopAllCoroutines();
         territoryManager?.ResetTerritory();
@@ -95,6 +109,40 @@ public sealed class GameManager : MonoBehaviour
 
         ResetGameState();
         Debug.Log("Level restarted");
+    }
+
+    public void ReturnToMainMenu()
+    {
+        hasStarted = false;
+        RefreshBallReferencesIfNeeded();
+        StopAllCoroutines();
+        territoryManager?.ResetTerritory();
+        playerController?.Respawn();
+
+        foreach (BallController ball in balls)
+        {
+            ball?.ResetBall();
+        }
+
+        ResetGameState();
+        Debug.Log("Returned to main menu");
+    }
+
+    public void StartNextLevelPlaceholder()
+    {
+        Debug.Log("Next level placeholder: restarting current level.");
+        RestartLevel();
+    }
+
+    public void QuitGame()
+    {
+        Debug.Log("Quit requested");
+
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
 
     private IEnumerator HandlePlayerDeathRoutine()
