@@ -329,7 +329,6 @@ MonoBehaviour:
   height: 40
   cellSize: 1
   tileHeight: 0.08
-  temporaryPathHeight: 0.18
   tileGap: 0.04
   tileRoot: {fileID: 0}
   claimedMaterial: {fileID: 0}
@@ -673,7 +672,7 @@ MonoBehaviour:
   gameManager: {fileID: 1078400845}
   moveSpeed: 20
   spawnCell: {x: 20, y: 0}
-  groundOffset: 2
+  groundOffset: 4
   turnSpeed: 16
   visualRoot: {fileID: 1624144886}
   overrideVisualColor: 0

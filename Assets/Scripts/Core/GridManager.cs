@@ -11,7 +11,6 @@ public sealed class GridManager : MonoBehaviour
 
     [Header("Visuals")]
     [SerializeField] private float tileHeight = 0.08f;
-    [SerializeField] private float temporaryPathHeight = 0.18f;
     [SerializeField] private float tileGap = 0.04f;
     [SerializeField] private Transform tileRoot;
     [SerializeField] private Material claimedMaterial;
@@ -281,13 +280,23 @@ public sealed class GridManager : MonoBehaviour
         }
 
         CellState state = grid[cell.x, cell.y];
-        float stateHeight = state == CellState.TemporaryPath ? temporaryPathHeight : tileHeight;
+        float stateHeight = GetHeightForState(state);
         float tileSize = Mathf.Max(0.05f, cellSize - tileGap);
 
         Transform tileTransform = tileRenderers[cell.x, cell.y].transform;
         Vector3 groundPosition = GridToWorld(cell);
         tileTransform.position = new Vector3(groundPosition.x, stateHeight * 0.5f, groundPosition.z);
         tileTransform.localScale = new Vector3(tileSize, stateHeight, tileSize);
+    }
+
+    private float GetHeightForState(CellState state)
+    {
+        return state switch
+        {
+            CellState.Claimed => wallHeight,
+            CellState.TemporaryPath => wallHeight,
+            _ => tileHeight
+        };
     }
 
     private void ApplyRendererMaterialAndColor(Renderer targetRenderer, Material stateMaterial, Color color)
