@@ -16,6 +16,7 @@ public sealed class GridManager : MonoBehaviour
 
     private CellState[,] grid;
     private Renderer[,] tileRenderers;
+    private MaterialPropertyBlock tilePropertyBlock;
 
     public int Width => width;
     public int Height => height;
@@ -23,7 +24,7 @@ public sealed class GridManager : MonoBehaviour
 
     private void Awake()
     {
-        EnsureMaterials();
+        tilePropertyBlock = new MaterialPropertyBlock();
         InitializeGrid();
         CreateTileVisuals();
         RefreshAllTiles();
@@ -131,7 +132,21 @@ public sealed class GridManager : MonoBehaviour
             return;
         }
 
-        tileRenderers[cell.x, cell.y].sharedMaterial = GetMaterialForState(grid[cell.x, cell.y]);
+        Renderer tileRenderer = tileRenderers[cell.x, cell.y];
+        CellState state = grid[cell.x, cell.y];
+        Material stateMaterial = GetMaterialForState(state);
+
+        if (stateMaterial != null)
+        {
+            tileRenderer.sharedMaterial = stateMaterial;
+            tileRenderer.SetPropertyBlock(null);
+            return;
+        }
+
+        tileRenderer.GetPropertyBlock(tilePropertyBlock);
+        tilePropertyBlock.SetColor("_Color", GetColorForState(state));
+        tilePropertyBlock.SetColor("_BaseColor", GetColorForState(state));
+        tileRenderer.SetPropertyBlock(tilePropertyBlock);
     }
 
     private Material GetMaterialForState(CellState state)
@@ -144,34 +159,13 @@ public sealed class GridManager : MonoBehaviour
         };
     }
 
-    private void EnsureMaterials()
+    private static Color GetColorForState(CellState state)
     {
-        claimedMaterial ??= CreateRuntimeMaterial("Runtime Claimed", new Color(0.18f, 0.72f, 0.34f));
-        unclaimedMaterial ??= CreateRuntimeMaterial("Runtime Unclaimed", new Color(0.34f, 0.36f, 0.38f));
-        temporaryPathMaterial ??= CreateRuntimeMaterial("Runtime Temporary Path", new Color(1f, 0.54f, 0.16f));
-    }
-
-    private static Material CreateRuntimeMaterial(string materialName, Color color)
-    {
-        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
-        shader ??= Shader.Find("Standard");
-        shader ??= Shader.Find("Unlit/Color");
-
-        Material material = new Material(shader)
+        return state switch
         {
-            name = materialName
+            CellState.Claimed => new Color(0.18f, 0.72f, 0.34f),
+            CellState.TemporaryPath => new Color(1f, 0.54f, 0.16f),
+            _ => new Color(0.34f, 0.36f, 0.38f)
         };
-
-        if (material.HasProperty("_BaseColor"))
-        {
-            material.SetColor("_BaseColor", color);
-        }
-
-        if (material.HasProperty("_Color"))
-        {
-            material.SetColor("_Color", color);
-        }
-
-        return material;
     }
 }
