@@ -44,13 +44,16 @@ Tasks:
 - Implement `PlayerController`.
 - Move only up/down/left/right.
 - Move smoothly while snapping gameplay logic to grid lines/cell centers.
+- On claimed territory, move only while a direction key is held.
+- In unclaimed territory, continue moving in the active drawing direction after key release.
+- While drawing, allow only perpendicular turns and ignore same-direction or opposite-direction input.
 - Keep player inside arena bounds.
 - Convert player world position to grid cell.
 - Detect when player enters a new cell.
 
 Deliverable:
 
-- Player can move around the arena in four directions.
+- Player can move around claimed territory with held input and move through unclaimed territory using committed drawing movement.
 
 ## Phase 4 - Temporary Path Drawing
 

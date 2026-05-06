@@ -68,6 +68,25 @@ Recommended first implementation:
 - Smoothly move the player's visible object while snapping logical movement to grid lines/cell centers.
 - Do not allow diagonal movement.
 
+### Claimed Territory Movement
+
+When the player is on `Claimed` territory:
+
+- Movement happens only while a direction key is held.
+- Releasing the key stops the player after reaching the current target cell.
+- The player can freely choose any valid four-direction movement inside the arena bounds.
+
+### Drawing Movement
+
+When the player enters `Unclaimed` territory and starts drawing:
+
+- The player continues moving in the active direction even if the key is released.
+- Direction changes are accepted only at grid cell boundaries.
+- A valid direction change must be perpendicular to the active direction.
+- Same-direction inputs are ignored.
+- Opposite-direction inputs are ignored to prevent immediate backtracking over the path.
+- Diagonal movement is never allowed.
+
 ## Drawing Temporary Path
 
 When the player leaves claimed territory and enters unclaimed territory:
@@ -94,6 +113,7 @@ The player should not be allowed to:
 - Leave the arena bounds.
 - Move diagonally.
 - Cross their own temporary path.
+- Reverse direction while drawing a temporary path.
 
 ## Capture Algorithm
 

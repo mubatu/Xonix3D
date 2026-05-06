@@ -31,6 +31,10 @@ public enum CellState
 - The player becomes vulnerable while drawing a path through unclaimed territory.
 - The player can only draw horizontal and vertical paths.
 - Diagonal drawing is not allowed.
+- On claimed territory, movement requires the player to hold a direction key.
+- While drawing through unclaimed territory, the player continues moving in the active direction even if the key is released.
+- While drawing, the player may change direction only with a perpendicular input.
+- While drawing, same-direction and opposite-direction inputs are ignored.
 
 ## Ball Rules
 

@@ -30,6 +30,9 @@ The game is visually 3D, but its core gameplay logic is based on a 2D grid proje
 ## Current Design Decisions
 
 - Player moves only in four directions.
+- On claimed territory, player moves only while a direction key is held.
+- While drawing through unclaimed territory, player keeps moving in the active direction until a valid turn is made or claimed territory is reached.
+- While drawing, player can turn only perpendicular to the active direction; same-direction and opposite-direction inputs are ignored.
 - Player movement is smooth while snapping gameplay logic to grid lines/cell centers.
 - Player is safe on claimed territory for now.
 - Balls stay only in unclaimed territory.

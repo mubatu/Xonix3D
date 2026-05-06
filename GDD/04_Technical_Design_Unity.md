@@ -110,6 +110,10 @@ Responsibilities:
 - Read input
 - Move in four directions
 - Move smoothly while snapping logical movement to grid lines/cell centers
+- Use held-key movement while on claimed territory
+- Use committed active-direction movement while drawing through unclaimed territory
+- Buffer perpendicular turn input while drawing and apply it at the next grid cell boundary
+- Ignore same-direction and opposite-direction input while drawing
 - Notify TerritoryManager when entering a new grid cell
 - Return to spawn on death
 
@@ -120,13 +124,16 @@ public float moveSpeed = 5f;
 public Vector3 targetWorldPosition;
 public Vector2Int currentCell;
 public Vector2Int spawnCell;
-public Vector2Int currentDirection;
+public Vector2Int activeDirection;
+public Vector2Int queuedDrawingDirection;
 ```
 
 Important methods:
 
 ```csharp
-void ReadInput();
+Vector2Int ReadHeldDirection();
+Vector2Int ReadPressedDirection();
+void QueueDrawingDirectionInput();
 void MovePlayer();
 void Respawn();
 ```
