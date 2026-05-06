@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public sealed class GridManager : MonoBehaviour
@@ -22,6 +24,11 @@ public sealed class GridManager : MonoBehaviour
     [SerializeField] private float wallThickness = 0.5f;
     [SerializeField] private Transform wallRoot;
     [SerializeField] private Material wallMaterial;
+
+    [Header("Capture Feedback")]
+    [SerializeField] private Color capturePulseColor = new Color(0.64f, 1f, 0.34f);
+    [SerializeField] private float capturePulseDuration = 0.45f;
+    [SerializeField] private int capturePulseCount = 2;
 
     private CellState[,] grid;
     private Renderer[,] tileRenderers;
@@ -99,8 +106,21 @@ public sealed class GridManager : MonoBehaviour
     public void ResetGrid()
     {
         InitializeIfNeeded();
+        StopAllCoroutines();
         InitializeGrid();
         RefreshAllTiles();
+    }
+
+    public void PlayCapturePulse(IReadOnlyList<Vector2Int> cells)
+    {
+        InitializeIfNeeded();
+
+        if (cells == null || cells.Count == 0)
+        {
+            return;
+        }
+
+        StartCoroutine(PlayCapturePulseRoutine(cells));
     }
 
     private void InitializeIfNeeded()
@@ -288,6 +308,45 @@ public sealed class GridManager : MonoBehaviour
         tilePropertyBlock.SetColor("_Color", color);
         tilePropertyBlock.SetColor("_BaseColor", color);
         targetRenderer.SetPropertyBlock(tilePropertyBlock);
+    }
+
+    private IEnumerator PlayCapturePulseRoutine(IReadOnlyList<Vector2Int> cells)
+    {
+        List<Vector2Int> pulseCells = new(cells);
+        int safePulseCount = Mathf.Max(1, capturePulseCount);
+        float halfPulseDuration = Mathf.Max(0.04f, capturePulseDuration / (safePulseCount * 2f));
+        Color claimedColor = GetColorForState(CellState.Claimed);
+
+        for (int pulseIndex = 0; pulseIndex < safePulseCount; pulseIndex++)
+        {
+            ApplyPulseColor(pulseCells, capturePulseColor);
+            yield return new WaitForSeconds(halfPulseDuration);
+
+            ApplyPulseColor(pulseCells, claimedColor);
+            yield return new WaitForSeconds(halfPulseDuration);
+        }
+
+        foreach (Vector2Int cell in pulseCells)
+        {
+            RefreshTile(cell);
+        }
+    }
+
+    private void ApplyPulseColor(List<Vector2Int> cells, Color color)
+    {
+        foreach (Vector2Int cell in cells)
+        {
+            if (!IsInsideGrid(cell) || tileRenderers == null || tileRenderers[cell.x, cell.y] == null)
+            {
+                continue;
+            }
+
+            Renderer tileRenderer = tileRenderers[cell.x, cell.y];
+            tileRenderer.GetPropertyBlock(tilePropertyBlock);
+            tilePropertyBlock.SetColor("_Color", color);
+            tilePropertyBlock.SetColor("_BaseColor", color);
+            tileRenderer.SetPropertyBlock(tilePropertyBlock);
+        }
     }
 
     private Material GetMaterialForState(CellState state)

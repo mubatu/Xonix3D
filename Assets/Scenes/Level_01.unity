@@ -340,6 +340,9 @@ MonoBehaviour:
   wallThickness: 0.5
   wallRoot: {fileID: 0}
   wallMaterial: {fileID: 0}
+  capturePulseColor: {r: 0.64, g: 1, b: 0.34, a: 1}
+  capturePulseDuration: 0.45
+  capturePulseCount: 2
 --- !u!4 &838259490
 Transform:
   m_ObjectHideFlags: 0
@@ -551,7 +554,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10303, guid: 0000000000000000f000000000000000, type: 0}
+  - {fileID: 2100000, guid: 29788143ee12648c7a6784df5e221fad, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -616,6 +619,9 @@ MonoBehaviour:
   startingLives: 3
   levelNumber: 1
   requiredCapturePercentage: 75
+  respawnDelay: 0.55
+  deathFlashCount: 4
+  deathPopScale: 1.35
 --- !u!4 &1078400846
 Transform:
   m_ObjectHideFlags: 0
@@ -863,7 +869,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10303, guid: 0000000000000000f000000000000000, type: 0}
+  - {fileID: 2100000, guid: 29788143ee12648c7a6784df5e221fad, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

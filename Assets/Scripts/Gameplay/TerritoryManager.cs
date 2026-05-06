@@ -112,6 +112,7 @@ public sealed class TerritoryManager : MonoBehaviour
         RefreshBallReferencesIfNeeded();
 
         bool[,] reachableFromBalls = FindReachableUnclaimedCellsFromBalls();
+        List<Vector2Int> newlyClaimedCells = new();
 
         for (int x = 0; x < gridManager.Width; x++)
         {
@@ -121,6 +122,7 @@ public sealed class TerritoryManager : MonoBehaviour
                 if (gridManager.GetCellState(cell) == CellState.Unclaimed && !reachableFromBalls[x, y])
                 {
                     gridManager.SetCellState(cell, CellState.Claimed);
+                    AddNewlyClaimedCell(newlyClaimedCells, cell);
                 }
             }
         }
@@ -128,11 +130,13 @@ public sealed class TerritoryManager : MonoBehaviour
         foreach (Vector2Int pathCell in temporaryPathCells)
         {
             gridManager.SetCellState(pathCell, CellState.Claimed);
+            AddNewlyClaimedCell(newlyClaimedCells, pathCell);
         }
 
         temporaryPathCells.Clear();
         isDrawing = false;
         capturedPercentage = CalculateCapturedPercentage();
+        gridManager.PlayCapturePulse(newlyClaimedCells);
         gameManager?.HandleCaptureUpdated(capturedPercentage);
         Debug.Log($"Captured: {Mathf.RoundToInt(capturedPercentage)}%");
     }
@@ -219,5 +223,13 @@ public sealed class TerritoryManager : MonoBehaviour
         }
 
         balls.AddRange(FindObjectsByType<BallController>(FindObjectsSortMode.None));
+    }
+
+    private static void AddNewlyClaimedCell(List<Vector2Int> cells, Vector2Int cell)
+    {
+        if (!cells.Contains(cell))
+        {
+            cells.Add(cell);
+        }
     }
 }
