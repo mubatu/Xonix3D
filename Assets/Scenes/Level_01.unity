@@ -330,6 +330,7 @@ MonoBehaviour:
   cellSize: 1
   tileHeight: 0.08
   tileGap: 0.04
+  groundRoot: {fileID: 0}
   tileRoot: {fileID: 0}
   claimedMaterial: {fileID: 0}
   unclaimedMaterial: {fileID: 0}
@@ -501,7 +502,7 @@ MonoBehaviour:
   playerController: {fileID: 1401430782}
   gameManager: {fileID: 1078400845}
   spawnCell: {x: 28, y: 28}
-  groundOffset: 0.65
+  groundOffset: 1
   speed: 10
   direction: {x: -0.856287, y: 0.5165003}
   hitRadius: 0.9
@@ -846,7 +847,7 @@ MonoBehaviour:
   playerController: {fileID: 1401430782}
   gameManager: {fileID: 1078400845}
   spawnCell: {x: 12, y: 24}
-  groundOffset: 0.65
+  groundOffset: 1
   speed: 10
   direction: {x: 0.7976006, y: 0.60318595}
   hitRadius: 0.9

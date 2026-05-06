@@ -12,6 +12,7 @@ public sealed class GridManager : MonoBehaviour
     [Header("Visuals")]
     [SerializeField] private float tileHeight = 0.08f;
     [SerializeField] private float tileGap = 0.04f;
+    [SerializeField] private Transform groundRoot;
     [SerializeField] private Transform tileRoot;
     [SerializeField] private Material claimedMaterial;
     [SerializeField] private Material unclaimedMaterial;
@@ -30,12 +31,19 @@ public sealed class GridManager : MonoBehaviour
     [SerializeField] private int capturePulseCount = 2;
 
     private CellState[,] grid;
-    private Renderer[,] tileRenderers;
+    private Renderer[,] pathTileRenderers;
     private Renderer[] wallRenderers;
     private MaterialPropertyBlock tilePropertyBlock;
+    private Material fallbackMaterial;
+    private MeshFilter claimedGroundMeshFilter;
+    private MeshFilter unclaimedGroundMeshFilter;
+    private MeshFilter pulseMeshFilter;
+    private Renderer pulseRenderer;
     private bool isInitialized;
-    private bool visualsCreated;
+    private bool groundVisualsCreated;
+    private bool pathTilePoolCreated;
     private bool wallsCreated;
+    private bool groundMeshesDirty;
 
     public int Width => width;
     public int Height => height;
@@ -44,6 +52,17 @@ public sealed class GridManager : MonoBehaviour
     private void Awake()
     {
         InitializeIfNeeded();
+    }
+
+    private void LateUpdate()
+    {
+        if (!isInitialized || !groundMeshesDirty)
+        {
+            return;
+        }
+
+        RebuildGroundMeshes();
+        groundMeshesDirty = false;
     }
 
     public Vector2Int WorldToGrid(Vector3 worldPosition)
@@ -92,7 +111,7 @@ public sealed class GridManager : MonoBehaviour
         }
 
         grid[cell.x, cell.y] = state;
-        RefreshTile(cell);
+        RefreshCellVisual(cell);
     }
 
     public bool IsBlockedForBall(Vector2Int cell)
@@ -106,8 +125,9 @@ public sealed class GridManager : MonoBehaviour
     {
         InitializeIfNeeded();
         StopAllCoroutines();
+        HideCapturePulse();
         InitializeGrid();
-        RefreshAllTiles();
+        RefreshAllVisuals();
     }
 
     public void PlayCapturePulse(IReadOnlyList<Vector2Int> cells)
@@ -117,6 +137,12 @@ public sealed class GridManager : MonoBehaviour
         if (cells == null || cells.Count == 0)
         {
             return;
+        }
+
+        if (groundMeshesDirty)
+        {
+            RebuildGroundMeshes();
+            groundMeshesDirty = false;
         }
 
         StartCoroutine(PlayCapturePulseRoutine(cells));
@@ -132,9 +158,10 @@ public sealed class GridManager : MonoBehaviour
         tilePropertyBlock ??= new MaterialPropertyBlock();
         InitializeGrid();
         isInitialized = true;
-        CreateTileVisuals();
+        CreateGroundVisuals();
+        CreatePathTilePool();
         CreateArenaWallVisuals();
-        RefreshAllTiles();
+        RefreshAllVisuals();
     }
 
     private void InitializeGrid()
@@ -151,36 +178,75 @@ public sealed class GridManager : MonoBehaviour
         }
     }
 
-    private void CreateTileVisuals()
+    private void CreateGroundVisuals()
     {
-        if (visualsCreated)
+        if (groundVisualsCreated)
+        {
+            return;
+        }
+
+        if (groundRoot == null)
+        {
+            GameObject rootObject = new GameObject("Ground Meshes");
+            rootObject.transform.SetParent(transform);
+            groundRoot = rootObject.transform;
+        }
+
+        claimedGroundMeshFilter = CreateMeshVisual(
+            "Claimed Ground Mesh",
+            groundRoot,
+            claimedMaterial,
+            GetColorForState(CellState.Claimed),
+            out _
+        );
+        unclaimedGroundMeshFilter = CreateMeshVisual(
+            "Unclaimed Ground Mesh",
+            groundRoot,
+            unclaimedMaterial,
+            GetColorForState(CellState.Unclaimed),
+            out _
+        );
+        pulseMeshFilter = CreateMeshVisual(
+            "Capture Pulse Mesh",
+            groundRoot,
+            null,
+            capturePulseColor,
+            out pulseRenderer
+        );
+        HideCapturePulse();
+
+        groundVisualsCreated = true;
+    }
+
+    private void CreatePathTilePool()
+    {
+        if (pathTilePoolCreated)
         {
             return;
         }
 
         if (tileRoot == null)
         {
-            GameObject rootObject = new GameObject("Tiles");
+            GameObject rootObject = new GameObject("Temporary Path Tiles");
             rootObject.transform.SetParent(transform);
             tileRoot = rootObject.transform;
         }
 
-        tileRenderers = new Renderer[width, height];
+        pathTileRenderers = new Renderer[width, height];
+        pathTilePoolCreated = true;
+    }
 
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                GameObject tile = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                tile.name = $"Tile_{x}_{y}";
-                tile.transform.SetParent(tileRoot);
+    private MeshFilter CreateMeshVisual(string objectName, Transform parent, Material material, Color color, out Renderer meshRenderer)
+    {
+        GameObject meshObject = new GameObject(objectName, typeof(MeshFilter), typeof(MeshRenderer));
+        meshObject.transform.SetParent(parent);
 
-                tileRenderers[x, y] = tile.GetComponent<Renderer>();
-                ConfigureTileTransform(new Vector2Int(x, y));
-            }
-        }
+        MeshFilter meshFilter = meshObject.GetComponent<MeshFilter>();
+        meshFilter.sharedMesh = new Mesh { name = objectName };
 
-        visualsCreated = true;
+        meshRenderer = meshObject.GetComponent<Renderer>();
+        ApplyRendererMaterialAndColor(meshRenderer, material, color);
+        return meshFilter;
     }
 
     private void CreateArenaWallVisuals()
@@ -248,42 +314,73 @@ public sealed class GridManager : MonoBehaviour
         return wall.GetComponent<Renderer>();
     }
 
-    private void RefreshAllTiles()
+    private void RefreshAllVisuals()
     {
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
-                RefreshTile(new Vector2Int(x, y));
+                RefreshCellVisual(new Vector2Int(x, y));
             }
         }
+
+        RebuildGroundMeshes();
+        groundMeshesDirty = false;
     }
 
-    private void RefreshTile(Vector2Int cell)
+    private void RefreshCellVisual(Vector2Int cell)
     {
-        if (!IsInsideGrid(cell) || tileRenderers == null || tileRenderers[cell.x, cell.y] == null)
-        {
-            return;
-        }
-
-        Renderer tileRenderer = tileRenderers[cell.x, cell.y];
-        CellState state = grid[cell.x, cell.y];
-        ConfigureTileTransform(cell);
-        ApplyRendererMaterialAndColor(tileRenderer, GetMaterialForState(state), GetColorForState(state));
-    }
-
-    private void ConfigureTileTransform(Vector2Int cell)
-    {
-        if (tileRenderers == null || tileRenderers[cell.x, cell.y] == null)
+        if (!IsInsideGrid(cell) || pathTileRenderers == null)
         {
             return;
         }
 
         CellState state = grid[cell.x, cell.y];
-        float stateHeight = GetHeightForState(state);
+        Renderer pathTileRenderer = pathTileRenderers[cell.x, cell.y];
+
+        if (state == CellState.TemporaryPath)
+        {
+            pathTileRenderer ??= CreatePathTileRenderer(cell);
+            ConfigurePathTileTransform(cell);
+            ApplyRendererMaterialAndColor(pathTileRenderer, temporaryPathMaterial, GetColorForState(CellState.TemporaryPath));
+            pathTileRenderer.gameObject.SetActive(true);
+        }
+        else if (pathTileRenderer != null)
+        {
+            pathTileRenderer.gameObject.SetActive(false);
+        }
+
+        groundMeshesDirty = true;
+    }
+
+    private Renderer CreatePathTileRenderer(Vector2Int cell)
+    {
+        GameObject tile = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        tile.name = $"TemporaryPathTile_{cell.x}_{cell.y}";
+        tile.transform.SetParent(tileRoot);
+
+        Collider tileCollider = tile.GetComponent<Collider>();
+        if (tileCollider != null)
+        {
+            Destroy(tileCollider);
+        }
+
+        Renderer pathTileRenderer = tile.GetComponent<Renderer>();
+        pathTileRenderers[cell.x, cell.y] = pathTileRenderer;
+        return pathTileRenderer;
+    }
+
+    private void ConfigurePathTileTransform(Vector2Int cell)
+    {
+        if (pathTileRenderers == null || pathTileRenderers[cell.x, cell.y] == null)
+        {
+            return;
+        }
+
+        float stateHeight = wallHeight;
         float tileSize = Mathf.Max(0.05f, cellSize - tileGap);
 
-        Transform tileTransform = tileRenderers[cell.x, cell.y].transform;
+        Transform tileTransform = pathTileRenderers[cell.x, cell.y].transform;
         Vector3 groundPosition = GridToWorld(cell);
         tileTransform.position = new Vector3(groundPosition.x, stateHeight * 0.5f, groundPosition.z);
         tileTransform.localScale = new Vector3(tileSize, stateHeight, tileSize);
@@ -294,8 +391,243 @@ public sealed class GridManager : MonoBehaviour
         return state switch
         {
             CellState.Claimed => wallHeight,
-            CellState.TemporaryPath => wallHeight,
             _ => tileHeight
+        };
+    }
+
+    private void RebuildGroundMeshes()
+    {
+        BuildGroundMesh(claimedGroundMeshFilter, CellState.Claimed);
+        BuildGroundMesh(unclaimedGroundMeshFilter, CellState.Unclaimed);
+    }
+
+    private void BuildGroundMesh(MeshFilter meshFilter, CellState meshState)
+    {
+        if (meshFilter == null)
+        {
+            return;
+        }
+
+        Mesh mesh = meshFilter.sharedMesh;
+        if (mesh == null)
+        {
+            mesh = new Mesh { name = meshFilter.gameObject.name };
+            meshFilter.sharedMesh = mesh;
+        }
+
+        List<Vector3> vertices = new();
+        List<int> triangles = new();
+        List<Vector2> uvs = new();
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                CellState state = grid[x, y];
+                if (!ShouldRenderInGroundMesh(state, meshState))
+                {
+                    continue;
+                }
+
+                Vector2Int cell = new Vector2Int(x, y);
+                float cellHeight = GetHeightForState(state);
+                AddTopFace(vertices, triangles, uvs, cell, cellHeight);
+                AddVisibleSideFaces(vertices, triangles, uvs, cell, cellHeight, meshState);
+            }
+        }
+
+        mesh.Clear();
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        mesh.SetVertices(vertices);
+        mesh.SetTriangles(triangles, 0);
+        mesh.SetUVs(0, uvs);
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+    }
+
+    private void AddTopFace(List<Vector3> vertices, List<int> triangles, List<Vector2> uvs, Vector2Int cell, float topY)
+    {
+        GetCellBounds(cell, out float minX, out float maxX, out float minZ, out float maxZ);
+
+        AddQuad(
+            vertices,
+            triangles,
+            uvs,
+            new Vector3(minX, topY, minZ),
+            new Vector3(minX, topY, maxZ),
+            new Vector3(maxX, topY, maxZ),
+            new Vector3(maxX, topY, minZ)
+        );
+    }
+
+    private void AddVisibleSideFaces(
+        List<Vector3> vertices,
+        List<int> triangles,
+        List<Vector2> uvs,
+        Vector2Int cell,
+        float topY,
+        CellState meshState
+    )
+    {
+        GetCellBounds(cell, out float minX, out float maxX, out float minZ, out float maxZ);
+
+        AddSideFaceIfVisible(vertices, triangles, uvs, cell + Vector2Int.up, meshState, topY, new[]
+        {
+            new Vector3(minX, 0f, maxZ),
+            new Vector3(maxX, 0f, maxZ),
+            new Vector3(maxX, topY, maxZ),
+            new Vector3(minX, topY, maxZ)
+        });
+
+        AddSideFaceIfVisible(vertices, triangles, uvs, cell + Vector2Int.down, meshState, topY, new[]
+        {
+            new Vector3(minX, 0f, minZ),
+            new Vector3(minX, topY, minZ),
+            new Vector3(maxX, topY, minZ),
+            new Vector3(maxX, 0f, minZ)
+        });
+
+        AddSideFaceIfVisible(vertices, triangles, uvs, cell + Vector2Int.right, meshState, topY, new[]
+        {
+            new Vector3(maxX, 0f, minZ),
+            new Vector3(maxX, topY, minZ),
+            new Vector3(maxX, topY, maxZ),
+            new Vector3(maxX, 0f, maxZ)
+        });
+
+        AddSideFaceIfVisible(vertices, triangles, uvs, cell + Vector2Int.left, meshState, topY, new[]
+        {
+            new Vector3(minX, 0f, minZ),
+            new Vector3(minX, 0f, maxZ),
+            new Vector3(minX, topY, maxZ),
+            new Vector3(minX, topY, minZ)
+        });
+    }
+
+    private void AddSideFaceIfVisible(
+        List<Vector3> vertices,
+        List<int> triangles,
+        List<Vector2> uvs,
+        Vector2Int neighbor,
+        CellState meshState,
+        float topY,
+        Vector3[] corners
+    )
+    {
+        if (IsInsideGrid(neighbor) && ShouldRenderInGroundMesh(grid[neighbor.x, neighbor.y], meshState))
+        {
+            return;
+        }
+
+        float bottomY = GetNeighborSurfaceHeight(neighbor);
+        if (topY <= bottomY + 0.001f)
+        {
+            return;
+        }
+
+        for (int i = 0; i < corners.Length; i++)
+        {
+            if (Mathf.Approximately(corners[i].y, 0f))
+            {
+                corners[i].y = bottomY;
+            }
+        }
+
+        AddQuad(vertices, triangles, uvs, corners[0], corners[1], corners[2], corners[3]);
+    }
+
+    private void BuildPulseMesh(IReadOnlyList<Vector2Int> cells)
+    {
+        if (pulseMeshFilter == null)
+        {
+            return;
+        }
+
+        Mesh mesh = pulseMeshFilter.sharedMesh;
+        if (mesh == null)
+        {
+            mesh = new Mesh { name = "Capture Pulse Mesh" };
+            pulseMeshFilter.sharedMesh = mesh;
+        }
+
+        List<Vector3> vertices = new();
+        List<int> triangles = new();
+        List<Vector2> uvs = new();
+        float pulseY = wallHeight + 0.01f;
+
+        foreach (Vector2Int cell in cells)
+        {
+            if (IsInsideGrid(cell))
+            {
+                AddTopFace(vertices, triangles, uvs, cell, pulseY);
+            }
+        }
+
+        mesh.Clear();
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        mesh.SetVertices(vertices);
+        mesh.SetTriangles(triangles, 0);
+        mesh.SetUVs(0, uvs);
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+    }
+
+    private void AddQuad(
+        List<Vector3> vertices,
+        List<int> triangles,
+        List<Vector2> uvs,
+        Vector3 bottomLeft,
+        Vector3 topLeft,
+        Vector3 topRight,
+        Vector3 bottomRight
+    )
+    {
+        int startIndex = vertices.Count;
+        vertices.Add(bottomLeft);
+        vertices.Add(topLeft);
+        vertices.Add(topRight);
+        vertices.Add(bottomRight);
+
+        triangles.Add(startIndex);
+        triangles.Add(startIndex + 1);
+        triangles.Add(startIndex + 2);
+        triangles.Add(startIndex);
+        triangles.Add(startIndex + 2);
+        triangles.Add(startIndex + 3);
+
+        uvs.Add(new Vector2(0f, 0f));
+        uvs.Add(new Vector2(0f, 1f));
+        uvs.Add(new Vector2(1f, 1f));
+        uvs.Add(new Vector2(1f, 0f));
+    }
+
+    private void GetCellBounds(Vector2Int cell, out float minX, out float maxX, out float minZ, out float maxZ)
+    {
+        Vector3 center = GridToWorld(cell);
+        float halfSize = cellSize * 0.5f;
+        minX = center.x - halfSize;
+        maxX = center.x + halfSize;
+        minZ = center.z - halfSize;
+        maxZ = center.z + halfSize;
+    }
+
+    private float GetNeighborSurfaceHeight(Vector2Int neighbor)
+    {
+        if (!IsInsideGrid(neighbor))
+        {
+            return 0f;
+        }
+
+        return GetHeightForState(grid[neighbor.x, neighbor.y]);
+    }
+
+    private static bool ShouldRenderInGroundMesh(CellState state, CellState meshState)
+    {
+        return meshState switch
+        {
+            CellState.Claimed => state == CellState.Claimed,
+            CellState.Unclaimed => state == CellState.Unclaimed || state == CellState.TemporaryPath,
+            _ => false
         };
     }
 
@@ -313,10 +645,35 @@ public sealed class GridManager : MonoBehaviour
             return;
         }
 
+        if (targetRenderer.sharedMaterial == null)
+        {
+            targetRenderer.sharedMaterial = GetFallbackMaterial();
+        }
+
         targetRenderer.GetPropertyBlock(tilePropertyBlock);
         tilePropertyBlock.SetColor("_Color", color);
         tilePropertyBlock.SetColor("_BaseColor", color);
         targetRenderer.SetPropertyBlock(tilePropertyBlock);
+    }
+
+    private Material GetFallbackMaterial()
+    {
+        if (fallbackMaterial != null)
+        {
+            return fallbackMaterial;
+        }
+
+        Shader shader = Shader.Find("Standard");
+        shader ??= Shader.Find("Universal Render Pipeline/Lit");
+        shader ??= Shader.Find("Unlit/Color");
+
+        fallbackMaterial = shader != null ? new Material(shader) : null;
+        if (fallbackMaterial != null)
+        {
+            fallbackMaterial.name = "Generated Ground Fallback Material";
+        }
+
+        return fallbackMaterial;
     }
 
     private IEnumerator PlayCapturePulseRoutine(IReadOnlyList<Vector2Int> cells)
@@ -326,46 +683,42 @@ public sealed class GridManager : MonoBehaviour
         float halfPulseDuration = Mathf.Max(0.04f, capturePulseDuration / (safePulseCount * 2f));
         Color claimedColor = GetColorForState(CellState.Claimed);
 
+        BuildPulseMesh(pulseCells);
+        SetCapturePulseVisible(true);
+
         for (int pulseIndex = 0; pulseIndex < safePulseCount; pulseIndex++)
         {
-            ApplyPulseColor(pulseCells, capturePulseColor);
+            SetCapturePulseColor(capturePulseColor);
             yield return new WaitForSeconds(halfPulseDuration);
 
-            ApplyPulseColor(pulseCells, claimedColor);
+            SetCapturePulseColor(claimedColor);
             yield return new WaitForSeconds(halfPulseDuration);
         }
 
-        foreach (Vector2Int cell in pulseCells)
+        HideCapturePulse();
+    }
+
+    private void SetCapturePulseColor(Color color)
+    {
+        if (pulseRenderer == null)
         {
-            RefreshTile(cell);
+            return;
+        }
+
+        ApplyRendererMaterialAndColor(pulseRenderer, null, color);
+    }
+
+    private void SetCapturePulseVisible(bool visible)
+    {
+        if (pulseRenderer != null)
+        {
+            pulseRenderer.enabled = visible;
         }
     }
 
-    private void ApplyPulseColor(List<Vector2Int> cells, Color color)
+    private void HideCapturePulse()
     {
-        foreach (Vector2Int cell in cells)
-        {
-            if (!IsInsideGrid(cell) || tileRenderers == null || tileRenderers[cell.x, cell.y] == null)
-            {
-                continue;
-            }
-
-            Renderer tileRenderer = tileRenderers[cell.x, cell.y];
-            tileRenderer.GetPropertyBlock(tilePropertyBlock);
-            tilePropertyBlock.SetColor("_Color", color);
-            tilePropertyBlock.SetColor("_BaseColor", color);
-            tileRenderer.SetPropertyBlock(tilePropertyBlock);
-        }
-    }
-
-    private Material GetMaterialForState(CellState state)
-    {
-        return state switch
-        {
-            CellState.Claimed => claimedMaterial,
-            CellState.TemporaryPath => temporaryPathMaterial,
-            _ => unclaimedMaterial
-        };
+        SetCapturePulseVisible(false);
     }
 
     private static Color GetColorForState(CellState state)
