@@ -17,10 +17,12 @@ public sealed class GameManager : MonoBehaviour
     private bool isLevelComplete;
     private float capturedPercentage;
     private int lastDeathFrame = -1;
-    private GUIStyle hudStyle;
-    private GUIStyle messageStyle;
 
+    public int StartingLives => startingLives;
+    public int LevelNumber => levelNumber;
     public int Lives => lives;
+    public float CapturedPercentage => capturedPercentage;
+    public float RequiredCapturePercentage => requiredCapturePercentage;
     public bool IsGameOver => isGameOver;
     public bool IsLevelComplete => isLevelComplete;
     public bool IsGameplayStopped => isGameOver || isLevelComplete;
@@ -39,6 +41,7 @@ public sealed class GameManager : MonoBehaviour
 
         RefreshBallReferencesIfNeeded();
         ResetGameState();
+        EnsureHudExists();
     }
 
     private void Update()
@@ -56,27 +59,6 @@ public sealed class GameManager : MonoBehaviour
         lastDeathFrame = -1;
         lives = startingLives;
         capturedPercentage = territoryManager != null ? territoryManager.CapturedPercentage : 0f;
-    }
-
-    private void OnGUI()
-    {
-        EnsureGuiStyles();
-
-        string hudText =
-            $"Lives: {lives}\n"
-            + $"Level: {levelNumber}\n"
-            + $"Captured: {Mathf.RoundToInt(capturedPercentage)}% / {Mathf.RoundToInt(requiredCapturePercentage)}%";
-
-        GUI.Label(new Rect(20f, 20f, 360f, 120f), hudText, hudStyle);
-
-        if (isLevelComplete)
-        {
-            DrawCenteredMessage("Level Complete!\nPress R to Restart");
-        }
-        else if (isGameOver)
-        {
-            DrawCenteredMessage("Game Over\nPress R to Restart");
-        }
     }
 
     public void HandlePlayerDeath()
@@ -135,34 +117,6 @@ public sealed class GameManager : MonoBehaviour
         Debug.Log("Level Complete!");
     }
 
-    private void EnsureGuiStyles()
-    {
-        if (hudStyle != null && messageStyle != null)
-        {
-            return;
-        }
-
-        hudStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 24
-        };
-        hudStyle.normal.textColor = Color.white;
-
-        messageStyle = new GUIStyle(GUI.skin.label)
-        {
-            alignment = TextAnchor.MiddleCenter,
-            fontSize = 48,
-            fontStyle = FontStyle.Bold
-        };
-        messageStyle.normal.textColor = Color.white;
-    }
-
-    private void DrawCenteredMessage(string message)
-    {
-        Rect rect = new Rect(0f, Screen.height * 0.36f, Screen.width, 160f);
-        GUI.Label(rect, message, messageStyle);
-    }
-
     private void RefreshBallReferencesIfNeeded()
     {
         if (balls != null && balls.Length > 0)
@@ -171,5 +125,15 @@ public sealed class GameManager : MonoBehaviour
         }
 
         balls = FindObjectsByType<BallController>(FindObjectsSortMode.None);
+    }
+
+    private void EnsureHudExists()
+    {
+        if (FindFirstObjectByType<GameHud>() != null)
+        {
+            return;
+        }
+
+        gameObject.AddComponent<GameHud>();
     }
 }
