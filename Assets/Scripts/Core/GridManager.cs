@@ -9,16 +9,27 @@ public sealed class GridManager : MonoBehaviour
 
     [Header("Visuals")]
     [SerializeField] private float tileHeight = 0.08f;
+    [SerializeField] private float temporaryPathHeight = 0.18f;
+    [SerializeField] private float tileGap = 0.04f;
     [SerializeField] private Transform tileRoot;
     [SerializeField] private Material claimedMaterial;
     [SerializeField] private Material unclaimedMaterial;
     [SerializeField] private Material temporaryPathMaterial;
 
+    [Header("Arena Walls")]
+    [SerializeField] private bool createArenaWalls = true;
+    [SerializeField] private float wallHeight = 1.2f;
+    [SerializeField] private float wallThickness = 0.5f;
+    [SerializeField] private Transform wallRoot;
+    [SerializeField] private Material wallMaterial;
+
     private CellState[,] grid;
     private Renderer[,] tileRenderers;
+    private Renderer[] wallRenderers;
     private MaterialPropertyBlock tilePropertyBlock;
     private bool isInitialized;
     private bool visualsCreated;
+    private bool wallsCreated;
 
     public int Width => width;
     public int Height => height;
@@ -103,6 +114,7 @@ public sealed class GridManager : MonoBehaviour
         InitializeGrid();
         isInitialized = true;
         CreateTileVisuals();
+        CreateArenaWallVisuals();
         RefreshAllTiles();
     }
 
@@ -143,14 +155,78 @@ public sealed class GridManager : MonoBehaviour
                 GameObject tile = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 tile.name = $"Tile_{x}_{y}";
                 tile.transform.SetParent(tileRoot);
-                tile.transform.position = GridToWorld(new Vector2Int(x, y));
-                tile.transform.localScale = new Vector3(cellSize, tileHeight, cellSize);
 
                 tileRenderers[x, y] = tile.GetComponent<Renderer>();
+                ConfigureTileTransform(new Vector2Int(x, y));
             }
         }
 
         visualsCreated = true;
+    }
+
+    private void CreateArenaWallVisuals()
+    {
+        if (wallsCreated || !createArenaWalls)
+        {
+            return;
+        }
+
+        if (wallRoot == null)
+        {
+            GameObject rootObject = new GameObject("Arena Walls");
+            rootObject.transform.SetParent(transform);
+            wallRoot = rootObject.transform;
+        }
+
+        wallRenderers = new Renderer[4];
+
+        float arenaWidth = width * cellSize;
+        float arenaHeight = height * cellSize;
+        float centerX = (width - 1) * cellSize * 0.5f;
+        float centerZ = (height - 1) * cellSize * 0.5f;
+        float wallY = wallHeight * 0.5f;
+        float minX = -cellSize * 0.5f - wallThickness * 0.5f;
+        float maxX = (width - 1) * cellSize + cellSize * 0.5f + wallThickness * 0.5f;
+        float minZ = -cellSize * 0.5f - wallThickness * 0.5f;
+        float maxZ = (height - 1) * cellSize + cellSize * 0.5f + wallThickness * 0.5f;
+
+        wallRenderers[0] = CreateWall(
+            "Wall_North",
+            new Vector3(centerX, wallY, maxZ),
+            new Vector3(arenaWidth + wallThickness * 2f, wallHeight, wallThickness)
+        );
+        wallRenderers[1] = CreateWall(
+            "Wall_South",
+            new Vector3(centerX, wallY, minZ),
+            new Vector3(arenaWidth + wallThickness * 2f, wallHeight, wallThickness)
+        );
+        wallRenderers[2] = CreateWall(
+            "Wall_East",
+            new Vector3(maxX, wallY, centerZ),
+            new Vector3(wallThickness, wallHeight, arenaHeight)
+        );
+        wallRenderers[3] = CreateWall(
+            "Wall_West",
+            new Vector3(minX, wallY, centerZ),
+            new Vector3(wallThickness, wallHeight, arenaHeight)
+        );
+
+        foreach (Renderer wallRenderer in wallRenderers)
+        {
+            ApplyRendererMaterialAndColor(wallRenderer, wallMaterial, new Color(0.04f, 0.24f, 0.26f));
+        }
+
+        wallsCreated = true;
+    }
+
+    private Renderer CreateWall(string wallName, Vector3 position, Vector3 scale)
+    {
+        GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        wall.name = wallName;
+        wall.transform.SetParent(wallRoot);
+        wall.transform.position = position;
+        wall.transform.localScale = scale;
+        return wall.GetComponent<Renderer>();
     }
 
     private void RefreshAllTiles()
@@ -173,19 +249,45 @@ public sealed class GridManager : MonoBehaviour
 
         Renderer tileRenderer = tileRenderers[cell.x, cell.y];
         CellState state = grid[cell.x, cell.y];
-        Material stateMaterial = GetMaterialForState(state);
+        ConfigureTileTransform(cell);
+        ApplyRendererMaterialAndColor(tileRenderer, GetMaterialForState(state), GetColorForState(state));
+    }
 
-        if (stateMaterial != null)
+    private void ConfigureTileTransform(Vector2Int cell)
+    {
+        if (tileRenderers == null || tileRenderers[cell.x, cell.y] == null)
         {
-            tileRenderer.sharedMaterial = stateMaterial;
-            tileRenderer.SetPropertyBlock(null);
             return;
         }
 
-        tileRenderer.GetPropertyBlock(tilePropertyBlock);
-        tilePropertyBlock.SetColor("_Color", GetColorForState(state));
-        tilePropertyBlock.SetColor("_BaseColor", GetColorForState(state));
-        tileRenderer.SetPropertyBlock(tilePropertyBlock);
+        CellState state = grid[cell.x, cell.y];
+        float stateHeight = state == CellState.TemporaryPath ? temporaryPathHeight : tileHeight;
+        float tileSize = Mathf.Max(0.05f, cellSize - tileGap);
+
+        Transform tileTransform = tileRenderers[cell.x, cell.y].transform;
+        Vector3 groundPosition = GridToWorld(cell);
+        tileTransform.position = new Vector3(groundPosition.x, stateHeight * 0.5f, groundPosition.z);
+        tileTransform.localScale = new Vector3(tileSize, stateHeight, tileSize);
+    }
+
+    private void ApplyRendererMaterialAndColor(Renderer targetRenderer, Material stateMaterial, Color color)
+    {
+        if (targetRenderer == null)
+        {
+            return;
+        }
+
+        if (stateMaterial != null)
+        {
+            targetRenderer.sharedMaterial = stateMaterial;
+            targetRenderer.SetPropertyBlock(null);
+            return;
+        }
+
+        targetRenderer.GetPropertyBlock(tilePropertyBlock);
+        tilePropertyBlock.SetColor("_Color", color);
+        tilePropertyBlock.SetColor("_BaseColor", color);
+        targetRenderer.SetPropertyBlock(tilePropertyBlock);
     }
 
     private Material GetMaterialForState(CellState state)
