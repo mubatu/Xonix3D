@@ -36,7 +36,7 @@ public sealed class TerritoryManager : MonoBehaviour
             gameManager = FindFirstObjectByType<GameManager>();
         }
 
-        RefreshBallReferencesIfNeeded();
+        RefreshBallReferences();
         capturedPercentage = CalculateCapturedPercentage();
         gameManager?.HandleCaptureUpdated(capturedPercentage);
     }
@@ -86,7 +86,7 @@ public sealed class TerritoryManager : MonoBehaviour
         temporaryPathCells.Clear();
         isDrawing = false;
         gridManager.ResetGrid();
-        RefreshBallReferencesIfNeeded();
+        RefreshBallReferences();
         capturedPercentage = CalculateCapturedPercentage();
     }
 
@@ -109,7 +109,7 @@ public sealed class TerritoryManager : MonoBehaviour
 
     private void CompletePath()
     {
-        RefreshBallReferencesIfNeeded();
+        RefreshBallReferences();
 
         bool[,] reachableFromBalls = FindReachableUnclaimedCellsFromBalls();
         List<Vector2Int> newlyClaimedCells = new();
@@ -152,20 +152,72 @@ public sealed class TerritoryManager : MonoBehaviour
                 continue;
             }
 
-            Vector2Int ballCell = ball.CurrentCell;
-            if (!gridManager.IsInsideGrid(ballCell) || gridManager.GetCellState(ballCell) != CellState.Unclaimed)
-            {
-                continue;
-            }
-
-            FloodFillUnclaimed(ballCell, reachable);
+            FloodFillFromBall(ball, reachable);
         }
 
         return reachable;
     }
 
+    private void FloodFillFromBall(BallController ball, bool[,] reachable)
+    {
+        Vector3 ballPosition = ball.transform.position;
+        float radius = Mathf.Max(0f, ball.HitRadius);
+        Vector2Int minCell = gridManager.WorldToGrid(new Vector3(ballPosition.x - radius, ballPosition.y, ballPosition.z - radius));
+        Vector2Int maxCell = gridManager.WorldToGrid(new Vector3(ballPosition.x + radius, ballPosition.y, ballPosition.z + radius));
+
+        bool foundSeedCell = false;
+        for (int x = minCell.x; x <= maxCell.x; x++)
+        {
+            for (int y = minCell.y; y <= maxCell.y; y++)
+            {
+                Vector2Int cell = new Vector2Int(x, y);
+                if (!IsValidBallSeedCell(cell, ballPosition, radius))
+                {
+                    continue;
+                }
+
+                foundSeedCell = true;
+                FloodFillUnclaimed(cell, reachable);
+            }
+        }
+
+        if (foundSeedCell)
+        {
+            return;
+        }
+
+        Vector2Int fallbackCell = ball.CurrentCell;
+        if (gridManager.IsInsideGrid(fallbackCell) && gridManager.GetCellState(fallbackCell) == CellState.Unclaimed)
+        {
+            FloodFillUnclaimed(fallbackCell, reachable);
+        }
+    }
+
+    private bool IsValidBallSeedCell(Vector2Int cell, Vector3 ballPosition, float radius)
+    {
+        if (!gridManager.IsInsideGrid(cell) || gridManager.GetCellState(cell) != CellState.Unclaimed)
+        {
+            return false;
+        }
+
+        Vector3 cellCenter = gridManager.GridToWorld(cell);
+        float halfCellSize = gridManager.CellSize * 0.5f;
+        float closestX = Mathf.Clamp(ballPosition.x, cellCenter.x - halfCellSize, cellCenter.x + halfCellSize);
+        float closestZ = Mathf.Clamp(ballPosition.z, cellCenter.z - halfCellSize, cellCenter.z + halfCellSize);
+        float radiusWithPadding = radius + 0.01f;
+        float dx = ballPosition.x - closestX;
+        float dz = ballPosition.z - closestZ;
+
+        return dx * dx + dz * dz <= radiusWithPadding * radiusWithPadding;
+    }
+
     private void FloodFillUnclaimed(Vector2Int startCell, bool[,] reachable)
     {
+        if (reachable[startCell.x, startCell.y])
+        {
+            return;
+        }
+
         Queue<Vector2Int> openCells = new();
         reachable[startCell.x, startCell.y] = true;
         openCells.Enqueue(startCell);
@@ -214,15 +266,17 @@ public sealed class TerritoryManager : MonoBehaviour
         return (float)claimedCells / totalCells * 100f;
     }
 
-    private void RefreshBallReferencesIfNeeded()
+    private void RefreshBallReferences()
     {
-        balls.RemoveAll(ball => ball == null);
-        if (balls.Count > 0)
+        balls.Clear();
+        BallController[] activeBalls = FindObjectsByType<BallController>(FindObjectsSortMode.None);
+        foreach (BallController ball in activeBalls)
         {
-            return;
+            if (ball != null && ball.isActiveAndEnabled)
+            {
+                balls.Add(ball);
+            }
         }
-
-        balls.AddRange(FindObjectsByType<BallController>(FindObjectsSortMode.None));
     }
 
     private static void AddNewlyClaimedCell(List<Vector2Int> cells, Vector2Int cell)
