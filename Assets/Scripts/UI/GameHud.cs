@@ -31,7 +31,6 @@ public sealed class GameHud : MonoBehaviour
     private Text messageTitleText;
     private Text messagePromptText;
     private Button startButton;
-    private Button retryButton;
     private Button nextLevelButton;
     private Button mainMenuButton;
     private Button quitButton;
@@ -151,16 +150,13 @@ public sealed class GameHud : MonoBehaviour
         startButton = CreateButton("Start Button", "START", panelRect, new Vector2(0f, -44f), buttonColor);
         startButton.onClick.AddListener(gameManager.StartGame);
 
-        retryButton = CreateButton("Retry Button", "RETRY", panelRect, new Vector2(-138f, -44f), buttonColor);
-        retryButton.onClick.AddListener(gameManager.RestartLevel);
-
-        nextLevelButton = CreateButton("Next Level Button", "NEXT LEVEL", panelRect, new Vector2(-138f, -44f), buttonColor);
-        nextLevelButton.onClick.AddListener(gameManager.StartNextLevelPlaceholder);
+        nextLevelButton = CreateButton("Next Level Button", "NEXT LEVEL", panelRect, new Vector2(0f, -44f), buttonColor);
+        nextLevelButton.onClick.AddListener(gameManager.StartNextLevel);
 
         mainMenuButton = CreateButton("Main Menu Button", "MAIN MENU", panelRect, new Vector2(0f, -112f), secondaryButtonColor);
         mainMenuButton.onClick.AddListener(gameManager.ReturnToMainMenu);
 
-        quitButton = CreateButton("Quit Button", "QUIT", panelRect, new Vector2(138f, -44f), secondaryButtonColor);
+        quitButton = CreateButton("Quit Button", "QUIT", panelRect, new Vector2(0f, -112f), secondaryButtonColor);
         quitButton.onClick.AddListener(gameManager.QuitGame);
     }
 
@@ -185,7 +181,10 @@ public sealed class GameHud : MonoBehaviour
             lifeHearts[i].color = i < gameManager.Lives ? lifeOnColor : lifeOffColor;
         }
 
-        bool showMessage = gameManager.IsMainMenuActive || gameManager.IsGameOver || gameManager.IsLevelComplete;
+        bool showMessage = gameManager.IsMainMenuActive
+            || gameManager.IsGameOver
+            || gameManager.IsLevelComplete
+            || gameManager.IsCampaignComplete;
         statusPanel.SetActive(gameManager.HasStarted);
         messagePanel.SetActive(showMessage);
         if (!showMessage)
@@ -196,13 +195,12 @@ public sealed class GameHud : MonoBehaviour
         messageTitleText.text = GetMessageTitle();
         messagePromptText.text = GetMessagePrompt();
         startButton.gameObject.SetActive(gameManager.IsMainMenuActive);
-        retryButton.gameObject.SetActive(gameManager.IsGameOver);
         nextLevelButton.gameObject.SetActive(gameManager.IsLevelComplete);
-        mainMenuButton.gameObject.SetActive(gameManager.IsGameOver || gameManager.IsLevelComplete);
-        quitButton.gameObject.SetActive(true);
-        quitButton.GetComponent<RectTransform>().anchoredPosition = gameManager.IsMainMenuActive
+        mainMenuButton.gameObject.SetActive(gameManager.IsGameOver || gameManager.IsLevelComplete || gameManager.IsCampaignComplete);
+        quitButton.gameObject.SetActive(gameManager.IsMainMenuActive);
+        mainMenuButton.GetComponent<RectTransform>().anchoredPosition = gameManager.IsLevelComplete
             ? new Vector2(0f, -112f)
-            : new Vector2(138f, -44f);
+            : new Vector2(0f, -44f);
     }
 
     private string GetMessageTitle()
@@ -210,6 +208,11 @@ public sealed class GameHud : MonoBehaviour
         if (gameManager.IsMainMenuActive)
         {
             return "XONIX 3D";
+        }
+
+        if (gameManager.IsCampaignComplete)
+        {
+            return "YOU WIN";
         }
 
         return gameManager.IsLevelComplete ? "LEVEL COMPLETE" : "GAME OVER";
@@ -222,7 +225,12 @@ public sealed class GameHud : MonoBehaviour
             return "Press Enter or Start";
         }
 
-        return gameManager.IsLevelComplete ? "Area secured" : "Press R or Retry";
+        if (gameManager.IsCampaignComplete)
+        {
+            return "All levels complete";
+        }
+
+        return gameManager.IsLevelComplete ? "Press Enter or Next Level" : "Run ended";
     }
 
     private Canvas CreateCanvas()

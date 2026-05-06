@@ -28,8 +28,19 @@ public sealed class PlayerController : MonoBehaviour
     private Renderer[] playerRenderers;
     private MaterialPropertyBlock propertyBlock;
     private Vector3 startingScale;
+    private bool hasInitialized;
 
     public Vector2Int CurrentCell => currentCell;
+
+    public void ConfigureSpawn(Vector2Int newSpawnCell)
+    {
+        spawnCell = newSpawnCell;
+
+        if (hasInitialized && gridManager != null)
+        {
+            Respawn();
+        }
+    }
 
     private void Start()
     {
@@ -51,6 +62,7 @@ public sealed class PlayerController : MonoBehaviour
         CacheVisualRenderers();
         propertyBlock = new MaterialPropertyBlock();
         startingScale = transform.localScale;
+        hasInitialized = true;
         ApplyColor();
 
         currentCell = spawnCell;

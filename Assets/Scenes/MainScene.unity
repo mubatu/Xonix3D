@@ -614,12 +614,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dfb07729ec47f42c18139eea8b9b4788, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gridManager: {fileID: 838259489}
   playerController: {fileID: 1401430782}
   territoryManager: {fileID: 553481386}
   balls: []
+  levelsResourceFolder: Levels
   startingLives: 3
   levelNumber: 1
-  requiredCapturePercentage: 75
   respawnDelay: 0.55
   deathFlashCount: 4
   deathPopScale: 1

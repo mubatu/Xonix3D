@@ -1,17 +1,21 @@
+using System;
 using System.Collections;
 using UnityEngine;
 
 public sealed class GameManager : MonoBehaviour
 {
     [Header("References")]
+    [SerializeField] private GridManager gridManager;
     [SerializeField] private PlayerController playerController;
     [SerializeField] private TerritoryManager territoryManager;
     [SerializeField] private BallController[] balls;
 
+    [Header("Level Data")]
+    [SerializeField] private string levelsResourceFolder = "Levels";
+
     [Header("State")]
     [SerializeField] private int startingLives = 3;
     [SerializeField] private int levelNumber = 1;
-    [SerializeField] private float requiredCapturePercentage = 75f;
 
     [Header("Death Feedback")]
     [SerializeField] private float respawnDelay = 0.55f;
@@ -22,9 +26,13 @@ public sealed class GameManager : MonoBehaviour
     private bool hasStarted;
     private bool isGameOver;
     private bool isLevelComplete;
+    private bool isCampaignComplete;
     private bool isRespawning;
     private float capturedPercentage;
+    private float requiredCapturePercentage = 75f;
     private int lastDeathFrame = -1;
+    private int currentLevelIndex;
+    private TextAsset[] levelFiles;
 
     public int StartingLives => startingLives;
     public int LevelNumber => levelNumber;
@@ -34,12 +42,18 @@ public sealed class GameManager : MonoBehaviour
     public bool HasStarted => hasStarted;
     public bool IsGameOver => isGameOver;
     public bool IsLevelComplete => isLevelComplete;
-    public bool IsMainMenuActive => !hasStarted && !isGameOver && !isLevelComplete;
-    public bool IsGameplayStopped => !hasStarted || isGameOver || isLevelComplete;
+    public bool IsCampaignComplete => isCampaignComplete;
+    public bool IsMainMenuActive => !hasStarted && !isGameOver && !isLevelComplete && !isCampaignComplete;
+    public bool IsGameplayStopped => !hasStarted || isGameOver || isLevelComplete || isCampaignComplete;
     public bool IsPlayerControlLocked => IsGameplayStopped || isRespawning;
 
     private void Awake()
     {
+        if (gridManager == null)
+        {
+            gridManager = FindFirstObjectByType<GridManager>();
+        }
+
         if (playerController == null)
         {
             playerController = FindFirstObjectByType<PlayerController>();
@@ -51,7 +65,9 @@ public sealed class GameManager : MonoBehaviour
         }
 
         RefreshBallReferencesIfNeeded();
-        ResetGameState();
+        LoadLevelFiles();
+        ApplyCurrentLevelData();
+        ResetGameState(true);
         EnsureHudExists();
     }
 
@@ -62,24 +78,176 @@ public sealed class GameManager : MonoBehaviour
             StartGame();
         }
 
-        if ((isGameOver || isLevelComplete) && Input.GetKeyDown(KeyCode.R))
+        if (isLevelComplete && Input.GetKeyDown(KeyCode.Return))
         {
-            RestartLevel();
+            StartNextLevel();
         }
     }
 
-    private void ResetGameState()
+    private void ResetGameState(bool resetLives)
     {
         isGameOver = false;
         isLevelComplete = false;
+        isCampaignComplete = false;
         isRespawning = false;
         lastDeathFrame = -1;
-        lives = startingLives;
+        if (resetLives)
+        {
+            lives = startingLives;
+        }
+
         capturedPercentage = territoryManager != null ? territoryManager.CapturedPercentage : 0f;
+    }
+
+    private void LoadLevelFiles()
+    {
+        levelFiles = Resources.LoadAll<TextAsset>(levelsResourceFolder);
+        Array.Sort(levelFiles, CompareLevelAssets);
+
+        if (levelFiles.Length == 0)
+        {
+            Debug.LogWarning($"No level JSON files found in Resources/{levelsResourceFolder}.");
+        }
+    }
+
+    private void ApplyCurrentLevelData()
+    {
+        LevelData currentLevelData = LoadLevelData();
+        if (currentLevelData == null)
+        {
+            return;
+        }
+
+        levelNumber = Mathf.Max(1, currentLevelData.levelNumber);
+        requiredCapturePercentage = Mathf.Clamp(currentLevelData.requiredCapturePercentage, 1f, 100f);
+        gridManager?.ApplyLevelData(currentLevelData);
+
+        if (playerController != null && currentLevelData.playerSpawnCell != null)
+        {
+            playerController.ConfigureSpawn(currentLevelData.playerSpawnCell.ToVector2Int());
+        }
+
+        ConfigureBallsFromLevel(currentLevelData);
+        territoryManager?.ResetTerritory();
+    }
+
+    private LevelData LoadLevelData()
+    {
+        if (levelFiles == null || levelFiles.Length == 0)
+        {
+            return null;
+        }
+
+        currentLevelIndex = Mathf.Clamp(currentLevelIndex, 0, levelFiles.Length - 1);
+        TextAsset source = levelFiles[currentLevelIndex];
+        if (source == null)
+        {
+            Debug.LogWarning($"Level file at index {currentLevelIndex} is missing. Using scene defaults.");
+            return null;
+        }
+
+        LevelData loadedData = JsonUtility.FromJson<LevelData>(source.text);
+        if (loadedData == null)
+        {
+            Debug.LogWarning($"Could not parse level JSON: {source.name}");
+        }
+
+        return loadedData;
+    }
+
+    private static int CompareLevelAssets(TextAsset left, TextAsset right)
+    {
+        int leftNumber = ExtractFirstNumber(left != null ? left.name : string.Empty);
+        int rightNumber = ExtractFirstNumber(right != null ? right.name : string.Empty);
+        if (leftNumber != rightNumber)
+        {
+            return leftNumber.CompareTo(rightNumber);
+        }
+
+        return string.Compare(left != null ? left.name : string.Empty, right != null ? right.name : string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int ExtractFirstNumber(string text)
+    {
+        int value = 0;
+        bool hasNumber = false;
+
+        foreach (char character in text)
+        {
+            if (!char.IsDigit(character))
+            {
+                if (hasNumber)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            hasNumber = true;
+            value = value * 10 + character - '0';
+        }
+
+        return hasNumber ? value : int.MaxValue;
+    }
+
+    private void ConfigureBallsFromLevel(LevelData levelData)
+    {
+        if (levelData.balls == null || levelData.balls.Length == 0)
+        {
+            return;
+        }
+
+        RefreshBallReferencesIfNeeded();
+        if (balls == null || balls.Length == 0)
+        {
+            Debug.LogWarning("Level JSON contains balls, but the scene has no BallController template.");
+            return;
+        }
+
+        BallController[] configuredBalls = EnsureBallCount(levelData.balls.Length);
+        for (int i = 0; i < configuredBalls.Length; i++)
+        {
+            bool hasLevelBall = i < levelData.balls.Length;
+            configuredBalls[i].gameObject.SetActive(hasLevelBall);
+            if (hasLevelBall)
+            {
+                configuredBalls[i].ConfigureFromLevel(levelData.balls[i]);
+            }
+        }
+
+        balls = configuredBalls;
+    }
+
+    private BallController[] EnsureBallCount(int requestedCount)
+    {
+        if (balls.Length >= requestedCount)
+        {
+            return balls;
+        }
+
+        BallController[] expandedBalls = new BallController[requestedCount];
+        for (int i = 0; i < balls.Length; i++)
+        {
+            expandedBalls[i] = balls[i];
+        }
+
+        BallController template = balls[0];
+        Transform parent = template.transform.parent;
+        for (int i = balls.Length; i < requestedCount; i++)
+        {
+            BallController newBall = Instantiate(template, parent);
+            newBall.name = $"Ball_{i + 1:00}";
+            expandedBalls[i] = newBall;
+        }
+
+        return expandedBalls;
     }
 
     public void StartGame()
     {
+        currentLevelIndex = 0;
+        ApplyCurrentLevelData();
         RestartLevel();
     }
 
@@ -96,24 +264,14 @@ public sealed class GameManager : MonoBehaviour
 
     public void RestartLevel()
     {
-        hasStarted = true;
-        RefreshBallReferencesIfNeeded();
-        StopAllCoroutines();
-        territoryManager?.ResetTerritory();
-        playerController?.Respawn();
-
-        foreach (BallController ball in balls)
-        {
-            ball?.ResetBall();
-        }
-
-        ResetGameState();
-        Debug.Log("Level restarted");
+        RestartLevel(true);
     }
 
     public void ReturnToMainMenu()
     {
         hasStarted = false;
+        currentLevelIndex = 0;
+        ApplyCurrentLevelData();
         RefreshBallReferencesIfNeeded();
         StopAllCoroutines();
         territoryManager?.ResetTerritory();
@@ -124,14 +282,23 @@ public sealed class GameManager : MonoBehaviour
             ball?.ResetBall();
         }
 
-        ResetGameState();
+        ResetGameState(true);
         Debug.Log("Returned to main menu");
     }
 
-    public void StartNextLevelPlaceholder()
+    public void StartNextLevel()
     {
-        Debug.Log("Next level placeholder: restarting current level.");
-        RestartLevel();
+        if (levelFiles == null || currentLevelIndex >= levelFiles.Length - 1)
+        {
+            isLevelComplete = false;
+            isCampaignComplete = true;
+            Debug.Log("Campaign Complete!");
+            return;
+        }
+
+        currentLevelIndex++;
+        ApplyCurrentLevelData();
+        RestartLevel(false);
     }
 
     public void QuitGame()
@@ -174,6 +341,23 @@ public sealed class GameManager : MonoBehaviour
         Debug.Log($"Player died. Lives remaining: {lives}");
     }
 
+    private void RestartLevel(bool resetLives)
+    {
+        hasStarted = true;
+        RefreshBallReferencesIfNeeded();
+        StopAllCoroutines();
+        territoryManager?.ResetTerritory();
+        playerController?.Respawn();
+
+        foreach (BallController ball in balls)
+        {
+            ball?.ResetBall();
+        }
+
+        ResetGameState(resetLives);
+        Debug.Log(resetLives ? "Level restarted" : "Level advanced placeholder");
+    }
+
     public void HandleCaptureUpdated(float newCapturedPercentage)
     {
         if (IsGameplayStopped)
@@ -187,9 +371,10 @@ public sealed class GameManager : MonoBehaviour
             return;
         }
 
-        isLevelComplete = true;
+        isLevelComplete = levelFiles != null && currentLevelIndex < levelFiles.Length - 1;
+        isCampaignComplete = !isLevelComplete;
         territoryManager?.CancelTemporaryPath();
-        Debug.Log("Level Complete!");
+        Debug.Log(isCampaignComplete ? "You Win!" : "Level Complete!");
     }
 
     private void RefreshBallReferencesIfNeeded()

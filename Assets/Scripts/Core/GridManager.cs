@@ -39,6 +39,8 @@ public sealed class GridManager : MonoBehaviour
     private MeshFilter unclaimedGroundMeshFilter;
     private MeshFilter pulseMeshFilter;
     private Renderer pulseRenderer;
+    private LevelClaimedArea[] initialClaimedAreas;
+    private LevelCell[] initialClaimedCells;
     private bool isInitialized;
     private bool groundVisualsCreated;
     private bool pathTilePoolCreated;
@@ -86,7 +88,7 @@ public sealed class GridManager : MonoBehaviour
     {
         InitializeIfNeeded();
 
-        return cell.x >= 0 && cell.x < width && cell.y >= 0 && cell.y < height;
+        return IsInsideGridBounds(cell.x, cell.y);
     }
 
     public CellState GetCellState(Vector2Int cell)
@@ -119,6 +121,34 @@ public sealed class GridManager : MonoBehaviour
         InitializeIfNeeded();
 
         return !IsInsideGrid(cell) || GetCellState(cell) != CellState.Unclaimed;
+    }
+
+    public void ApplyLevelData(LevelData levelData)
+    {
+        if (levelData == null)
+        {
+            return;
+        }
+
+        bool dimensionsChanged = width != levelData.width
+            || height != levelData.height
+            || !Mathf.Approximately(cellSize, levelData.cellSize);
+
+        width = Mathf.Max(2, levelData.width);
+        height = Mathf.Max(2, levelData.height);
+        cellSize = Mathf.Max(0.1f, levelData.cellSize);
+        initialClaimedAreas = levelData.initiallyClaimedAreas;
+        initialClaimedCells = levelData.initiallyClaimedCells;
+
+        if (isInitialized && dimensionsChanged)
+        {
+            ResetRuntimeVisuals();
+            CreateGroundVisuals();
+            CreatePathTilePool();
+            CreateArenaWallVisuals();
+        }
+
+        ResetGrid();
     }
 
     public void ResetGrid()
@@ -167,13 +197,62 @@ public sealed class GridManager : MonoBehaviour
     private void InitializeGrid()
     {
         grid = new CellState[width, height];
+        bool hasCustomInitialClaims = (initialClaimedAreas != null && initialClaimedAreas.Length > 0)
+            || (initialClaimedCells != null && initialClaimedCells.Length > 0);
 
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
                 bool isBorder = x == 0 || x == width - 1 || y == 0 || y == height - 1;
-                grid[x, y] = isBorder ? CellState.Claimed : CellState.Unclaimed;
+                grid[x, y] = !hasCustomInitialClaims && isBorder ? CellState.Claimed : CellState.Unclaimed;
+            }
+        }
+
+        ApplyInitialClaims();
+    }
+
+    private void ApplyInitialClaims()
+    {
+        if (initialClaimedAreas != null)
+        {
+            foreach (LevelClaimedArea area in initialClaimedAreas)
+            {
+                ApplyInitialClaimedArea(area);
+            }
+        }
+
+        if (initialClaimedCells == null)
+        {
+            return;
+        }
+
+        foreach (LevelCell cell in initialClaimedCells)
+        {
+            if (cell != null && IsInsideGridBounds(cell.x, cell.y))
+            {
+                grid[cell.x, cell.y] = CellState.Claimed;
+            }
+        }
+    }
+
+    private void ApplyInitialClaimedArea(LevelClaimedArea area)
+    {
+        if (area == null)
+        {
+            return;
+        }
+
+        int startX = Mathf.Clamp(area.x, 0, width - 1);
+        int startY = Mathf.Clamp(area.y, 0, height - 1);
+        int endX = Mathf.Clamp(area.x + Mathf.Max(1, area.width), 0, width);
+        int endY = Mathf.Clamp(area.y + Mathf.Max(1, area.height), 0, height);
+
+        for (int x = startX; x < endX; x++)
+        {
+            for (int y = startY; y < endY; y++)
+            {
+                grid[x, y] = CellState.Claimed;
             }
         }
     }
@@ -216,6 +295,26 @@ public sealed class GridManager : MonoBehaviour
         HideCapturePulse();
 
         groundVisualsCreated = true;
+    }
+
+    private void ResetRuntimeVisuals()
+    {
+        HideCapturePulse();
+        DestroyChildren(groundRoot);
+        DestroyChildren(tileRoot);
+        DestroyChildren(wallRoot);
+
+        pathTileRenderers = null;
+        wallRenderers = null;
+        claimedGroundMeshFilter = null;
+        unclaimedGroundMeshFilter = null;
+        pulseMeshFilter = null;
+        pulseRenderer = null;
+
+        groundVisualsCreated = false;
+        pathTilePoolCreated = false;
+        wallsCreated = false;
+        groundMeshesDirty = false;
     }
 
     private void CreatePathTilePool()
@@ -629,6 +728,24 @@ public sealed class GridManager : MonoBehaviour
             CellState.Unclaimed => state == CellState.Unclaimed || state == CellState.TemporaryPath,
             _ => false
         };
+    }
+
+    private bool IsInsideGridBounds(int x, int y)
+    {
+        return x >= 0 && x < width && y >= 0 && y < height;
+    }
+
+    private static void DestroyChildren(Transform root)
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        for (int i = root.childCount - 1; i >= 0; i--)
+        {
+            Destroy(root.GetChild(i).gameObject);
+        }
     }
 
     private void ApplyRendererMaterialAndColor(Renderer targetRenderer, Material stateMaterial, Color color)

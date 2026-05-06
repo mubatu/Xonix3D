@@ -112,6 +112,38 @@ public sealed class BallController : MonoBehaviour
         trailRenderer?.Clear();
     }
 
+    public void ConfigureFromLevel(LevelBallData ballData)
+    {
+        if (ballData == null)
+        {
+            return;
+        }
+
+        if (ballData.spawnCell != null)
+        {
+            spawnCell = ballData.spawnCell.ToVector2Int();
+        }
+
+        if (ballData.direction != null)
+        {
+            direction = ballData.direction.ToVector2();
+        }
+
+        speed = Mathf.Max(0.1f, ballData.speed);
+        hitRadius = Mathf.Max(0.01f, ballData.hitRadius);
+        playerHitRadius = Mathf.Max(0.01f, ballData.playerHitRadius);
+        groundOffset = ballData.groundOffset;
+        NormalizeDirection();
+        initialDirection = direction;
+
+        if (gridManager != null)
+        {
+            transform.position = GetBallWorldPosition(spawnCell);
+        }
+
+        trailRenderer?.Clear();
+    }
+
     private void MoveBall()
     {
         if (gridManager == null)
