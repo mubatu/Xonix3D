@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 public sealed class PlayerController : MonoBehaviour
@@ -23,6 +24,7 @@ public sealed class PlayerController : MonoBehaviour
     private bool isMoving;
     private Renderer playerRenderer;
     private MaterialPropertyBlock propertyBlock;
+    private Vector3 startingScale;
 
     public Vector2Int CurrentCell => currentCell;
 
@@ -45,6 +47,7 @@ public sealed class PlayerController : MonoBehaviour
 
         playerRenderer = GetComponentInChildren<Renderer>();
         propertyBlock = new MaterialPropertyBlock();
+        startingScale = transform.localScale;
         ApplyColor();
 
         currentCell = spawnCell;
@@ -55,7 +58,7 @@ public sealed class PlayerController : MonoBehaviour
 
     private void Update()
     {
-        if (gameManager != null && gameManager.IsGameplayStopped)
+        if (gameManager != null && gameManager.IsPlayerControlLocked)
         {
             return;
         }
@@ -79,6 +82,42 @@ public sealed class PlayerController : MonoBehaviour
         currentCell = spawnCell;
         targetCell = spawnCell;
         transform.position = GetPlayerWorldPosition(spawnCell);
+        transform.localScale = startingScale;
+        SetVisible(true);
+        ApplyColor();
+    }
+
+    public IEnumerator PlayDeathFeedback(float duration, int flashCount, float popScale)
+    {
+        isMoving = false;
+        activeDirection = Vector2Int.zero;
+        queuedDrawingDirection = Vector2Int.zero;
+
+        float elapsed = 0f;
+        float safeDuration = Mathf.Max(0.05f, duration);
+        int safeFlashCount = Mathf.Max(1, flashCount);
+        float flashInterval = safeDuration / (safeFlashCount * 2f);
+
+        transform.localScale = startingScale * Mathf.Max(1f, popScale);
+
+        for (int i = 0; i < safeFlashCount; i++)
+        {
+            SetVisible(false);
+            yield return new WaitForSeconds(flashInterval);
+            elapsed += flashInterval;
+
+            SetVisible(true);
+            yield return new WaitForSeconds(flashInterval);
+            elapsed += flashInterval;
+        }
+
+        if (elapsed < safeDuration)
+        {
+            yield return new WaitForSeconds(safeDuration - elapsed);
+        }
+
+        SetVisible(true);
+        transform.localScale = startingScale;
     }
 
     private Vector2Int GetMoveDirection()
@@ -243,6 +282,14 @@ public sealed class PlayerController : MonoBehaviour
         propertyBlock.SetColor("_Color", playerColor);
         propertyBlock.SetColor("_BaseColor", playerColor);
         playerRenderer.SetPropertyBlock(propertyBlock);
+    }
+
+    private void SetVisible(bool visible)
+    {
+        if (playerRenderer != null)
+        {
+            playerRenderer.enabled = visible;
+        }
     }
 
     private static bool IsSameOrOppositeDirection(Vector2Int direction, Vector2Int otherDirection)
