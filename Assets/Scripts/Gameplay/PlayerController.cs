@@ -223,6 +223,7 @@ public sealed class PlayerController : MonoBehaviour
 
         if (gridManager.GetCellState(nextCell) == CellState.TemporaryPath)
         {
+            gameManager?.HandlePlayerDeath();
             return;
         }
 
