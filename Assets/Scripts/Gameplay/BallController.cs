@@ -26,6 +26,7 @@ public sealed class BallController : MonoBehaviour
 
     private Renderer ballRenderer;
     private MaterialPropertyBlock propertyBlock;
+    private Vector2 initialDirection;
 
     public Vector2 Direction => direction;
     public float HitRadius => hitRadius;
@@ -56,6 +57,7 @@ public sealed class BallController : MonoBehaviour
         ballRenderer = GetComponentInChildren<Renderer>();
         propertyBlock = new MaterialPropertyBlock();
         NormalizeDirection();
+        initialDirection = direction;
         ApplyColor();
     }
 
@@ -92,6 +94,13 @@ public sealed class BallController : MonoBehaviour
     private void OnValidate()
     {
         NormalizeDirection();
+    }
+
+    public void ResetBall()
+    {
+        direction = initialDirection;
+        NormalizeDirection();
+        transform.position = GetBallWorldPosition(spawnCell);
     }
 
     private void MoveBall()

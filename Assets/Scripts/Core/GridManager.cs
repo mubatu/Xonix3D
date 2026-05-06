@@ -85,6 +85,13 @@ public sealed class GridManager : MonoBehaviour
         return !IsInsideGrid(cell) || GetCellState(cell) != CellState.Unclaimed;
     }
 
+    public void ResetGrid()
+    {
+        InitializeIfNeeded();
+        InitializeGrid();
+        RefreshAllTiles();
+    }
+
     private void InitializeIfNeeded()
     {
         if (isInitialized)

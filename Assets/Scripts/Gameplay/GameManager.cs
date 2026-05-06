@@ -5,6 +5,7 @@ public sealed class GameManager : MonoBehaviour
     [Header("References")]
     [SerializeField] private PlayerController playerController;
     [SerializeField] private TerritoryManager territoryManager;
+    [SerializeField] private BallController[] balls;
 
     [Header("State")]
     [SerializeField] private int startingLives = 3;
@@ -36,6 +37,23 @@ public sealed class GameManager : MonoBehaviour
             territoryManager = FindFirstObjectByType<TerritoryManager>();
         }
 
+        RefreshBallReferencesIfNeeded();
+        ResetGameState();
+    }
+
+    private void Update()
+    {
+        if (IsGameplayStopped && Input.GetKeyDown(KeyCode.R))
+        {
+            RestartLevel();
+        }
+    }
+
+    private void ResetGameState()
+    {
+        isGameOver = false;
+        isLevelComplete = false;
+        lastDeathFrame = -1;
         lives = startingLives;
         capturedPercentage = territoryManager != null ? territoryManager.CapturedPercentage : 0f;
     }
@@ -53,11 +71,11 @@ public sealed class GameManager : MonoBehaviour
 
         if (isLevelComplete)
         {
-            DrawCenteredMessage("Level Complete!");
+            DrawCenteredMessage("Level Complete!\nPress R to Restart");
         }
         else if (isGameOver)
         {
-            DrawCenteredMessage("Game Over");
+            DrawCenteredMessage("Game Over\nPress R to Restart");
         }
     }
 
@@ -82,6 +100,21 @@ public sealed class GameManager : MonoBehaviour
         }
 
         Debug.Log($"Player died. Lives remaining: {lives}");
+    }
+
+    public void RestartLevel()
+    {
+        RefreshBallReferencesIfNeeded();
+        territoryManager?.ResetTerritory();
+        playerController?.Respawn();
+
+        foreach (BallController ball in balls)
+        {
+            ball?.ResetBall();
+        }
+
+        ResetGameState();
+        Debug.Log("Level restarted");
     }
 
     public void HandleCaptureUpdated(float newCapturedPercentage)
@@ -126,7 +159,17 @@ public sealed class GameManager : MonoBehaviour
 
     private void DrawCenteredMessage(string message)
     {
-        Rect rect = new Rect(0f, Screen.height * 0.4f, Screen.width, 100f);
+        Rect rect = new Rect(0f, Screen.height * 0.36f, Screen.width, 160f);
         GUI.Label(rect, message, messageStyle);
+    }
+
+    private void RefreshBallReferencesIfNeeded()
+    {
+        if (balls != null && balls.Length > 0)
+        {
+            return;
+        }
+
+        balls = FindObjectsByType<BallController>(FindObjectsSortMode.None);
     }
 }

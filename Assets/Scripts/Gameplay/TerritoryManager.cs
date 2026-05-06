@@ -81,6 +81,15 @@ public sealed class TerritoryManager : MonoBehaviour
         gameManager?.HandleCaptureUpdated(capturedPercentage);
     }
 
+    public void ResetTerritory()
+    {
+        temporaryPathCells.Clear();
+        isDrawing = false;
+        gridManager.ResetGrid();
+        RefreshBallReferencesIfNeeded();
+        capturedPercentage = CalculateCapturedPercentage();
+    }
+
     private void StartDrawing(Vector2Int cell)
     {
         isDrawing = true;
