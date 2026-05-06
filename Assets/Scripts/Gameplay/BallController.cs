@@ -23,10 +23,16 @@ public sealed class BallController : MonoBehaviour
 
     [Header("Visuals")]
     [SerializeField] private Color ballColor = new Color(0.92f, 0.18f, 0.18f);
+    [SerializeField] private bool createTrail = true;
+    [SerializeField] private float trailTime = 0.35f;
+    [SerializeField] private float trailStartWidth = 0.28f;
+    [SerializeField] private float trailEndWidth = 0.02f;
+    [SerializeField] private float visualRadius = 0.5f;
 
     private Renderer ballRenderer;
     private MaterialPropertyBlock propertyBlock;
     private Vector2 initialDirection;
+    private TrailRenderer trailRenderer;
 
     public Vector2 Direction => direction;
     public float HitRadius => hitRadius;
@@ -59,6 +65,7 @@ public sealed class BallController : MonoBehaviour
         NormalizeDirection();
         initialDirection = direction;
         ApplyColor();
+        EnsureTrail();
     }
 
     private void OnEnable()
@@ -101,6 +108,7 @@ public sealed class BallController : MonoBehaviour
         direction = initialDirection;
         NormalizeDirection();
         transform.position = GetBallWorldPosition(spawnCell);
+        trailRenderer?.Clear();
     }
 
     private void MoveBall()
@@ -151,6 +159,7 @@ public sealed class BallController : MonoBehaviour
         if (GetCellStateAt(correctedPosition) == CellState.Unclaimed)
         {
             transform.position = correctedPosition;
+            RollVisual(correctedMovement);
         }
     }
 
@@ -234,6 +243,61 @@ public sealed class BallController : MonoBehaviour
         propertyBlock.SetColor("_Color", ballColor);
         propertyBlock.SetColor("_BaseColor", ballColor);
         ballRenderer.SetPropertyBlock(propertyBlock);
+    }
+
+    private void EnsureTrail()
+    {
+        if (!createTrail)
+        {
+            return;
+        }
+
+        trailRenderer = GetComponent<TrailRenderer>();
+        if (trailRenderer == null)
+        {
+            trailRenderer = gameObject.AddComponent<TrailRenderer>();
+        }
+
+        trailRenderer.time = trailTime;
+        trailRenderer.startWidth = trailStartWidth;
+        trailRenderer.endWidth = trailEndWidth;
+        trailRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        trailRenderer.receiveShadows = false;
+
+        Material trailMaterial = CreateTrailMaterial();
+        if (trailMaterial != null)
+        {
+            trailRenderer.material = trailMaterial;
+        }
+
+        Color startColor = ballColor;
+        startColor.a = 0.65f;
+        Color endColor = ballColor;
+        endColor.a = 0f;
+        trailRenderer.startColor = startColor;
+        trailRenderer.endColor = endColor;
+    }
+
+    private void RollVisual(Vector3 movement)
+    {
+        if (ballRenderer == null || movement.sqrMagnitude < 0.0001f)
+        {
+            return;
+        }
+
+        Vector3 axis = Vector3.Cross(Vector3.up, movement.normalized);
+        float degrees = movement.magnitude / Mathf.Max(0.01f, visualRadius) * Mathf.Rad2Deg;
+        ballRenderer.transform.Rotate(axis, degrees, Space.World);
+    }
+
+    private static Material CreateTrailMaterial()
+    {
+        Shader shader = Shader.Find("Sprites/Default");
+        shader ??= Shader.Find("Particles/Standard Unlit");
+        shader ??= Shader.Find("Unlit/Color");
+        shader ??= Shader.Find("Standard");
+
+        return shader != null ? new Material(shader) : null;
     }
 
     private static Vector2 GetXZ(Vector3 position)
