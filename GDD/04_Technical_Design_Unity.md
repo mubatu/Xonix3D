@@ -258,5 +258,5 @@ Unity colliders may still be used for visual debugging, but they should not be t
 Initial camera:
 
 - Fixed position
-- Orthographic or perspective
+- Perspective
 - Angled down toward arena

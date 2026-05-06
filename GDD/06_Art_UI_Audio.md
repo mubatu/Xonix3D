@@ -81,8 +81,6 @@ Initial camera:
 
 Possible camera modes later:
 
-- Orthographic fixed camera
-- Perspective fixed camera
 - Smooth follow camera
 - Slight cinematic tilt
 
