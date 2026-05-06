@@ -22,6 +22,7 @@ public sealed class BallController : MonoBehaviour
     [SerializeField] private float playerHitRadius = 0.45f;
 
     [Header("Visuals")]
+    [SerializeField] private bool overrideBallColor;
     [SerializeField] private Color ballColor = new Color(0.92f, 0.18f, 0.18f);
     [SerializeField] private bool createTrail = true;
     [SerializeField] private float trailTime = 0.35f;
@@ -236,6 +237,12 @@ public sealed class BallController : MonoBehaviour
     {
         if (ballRenderer == null)
         {
+            return;
+        }
+
+        if (!overrideBallColor)
+        {
+            ballRenderer.SetPropertyBlock(null);
             return;
         }
 
