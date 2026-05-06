@@ -12,8 +12,8 @@ public sealed class GameHud : MonoBehaviour
     [SerializeField] private Color textColor = Color.white;
     [SerializeField] private Color progressBackColor = new Color(0.12f, 0.14f, 0.15f, 0.95f);
     [SerializeField] private Color progressFillColor = new Color(0.25f, 0.82f, 0.38f, 0.95f);
-    [SerializeField] private Color lifeOnColor = new Color(0.2f, 0.58f, 1f, 1f);
-    [SerializeField] private Color lifeOffColor = new Color(0.16f, 0.18f, 0.2f, 0.9f);
+    [SerializeField] private Color lifeOnColor = new Color(0.95f, 0.08f, 0.12f, 1f);
+    [SerializeField] private Color lifeOffColor = new Color(0.28f, 0.08f, 0.1f, 0.9f);
     [SerializeField] private Color messagePanelColor = new Color(0.02f, 0.04f, 0.05f, 0.86f);
     [SerializeField] private Color buttonColor = new Color(0.16f, 0.38f, 0.72f, 0.96f);
     [SerializeField] private Color secondaryButtonColor = new Color(0.14f, 0.18f, 0.2f, 0.96f);
@@ -25,7 +25,8 @@ public sealed class GameHud : MonoBehaviour
     private Text levelText;
     private Text captureText;
     private Image captureFill;
-    private Image[] lifePips;
+    private Image[] lifeHearts;
+    private Sprite heartSprite;
     private GameObject messagePanel;
     private Text messageTitleText;
     private Text messagePromptText;
@@ -56,30 +57,47 @@ public sealed class GameHud : MonoBehaviour
         canvas = CreateCanvas();
         EnsureEventSystemExists();
 
-        RectTransform topPanel = CreatePanel("Status Panel", canvas.transform, panelColor);
-        statusPanel = topPanel.gameObject;
-        topPanel.anchorMin = new Vector2(0f, 1f);
-        topPanel.anchorMax = new Vector2(0f, 1f);
-        topPanel.pivot = new Vector2(0f, 1f);
-        topPanel.anchoredPosition = new Vector2(24f, -24f);
-        topPanel.sizeDelta = new Vector2(440f, 158f);
+        RectTransform statusRoot = CreateRect("Status Root", canvas.transform);
+        statusPanel = statusRoot.gameObject;
+        statusRoot.anchorMin = Vector2.zero;
+        statusRoot.anchorMax = Vector2.one;
+        statusRoot.offsetMin = Vector2.zero;
+        statusRoot.offsetMax = Vector2.zero;
 
-        levelText = CreateText("Level Text", topPanel, 24, FontStyle.Bold, TextAnchor.MiddleLeft);
-        SetRect(levelText.rectTransform, new Vector2(20f, -18f), new Vector2(180f, 34f), new Vector2(0f, 1f));
+        RectTransform levelPanel = CreatePanel("Level Panel", statusRoot, panelColor);
+        levelPanel.anchorMin = new Vector2(0f, 1f);
+        levelPanel.anchorMax = new Vector2(0f, 1f);
+        levelPanel.pivot = new Vector2(0f, 1f);
+        levelPanel.anchoredPosition = new Vector2(24f, -24f);
+        levelPanel.sizeDelta = new Vector2(440f, 124f);
 
-        RectTransform livesRoot = CreateRect("Lives", topPanel);
+        levelText = CreateText("Level Text", levelPanel, 24, FontStyle.Bold, TextAnchor.MiddleLeft);
+        SetRect(levelText.rectTransform, new Vector2(20f, -20f), new Vector2(150f, 34f), new Vector2(0f, 1f));
+
+        captureText = CreateText("Capture Text", levelPanel, 20, FontStyle.Bold, TextAnchor.MiddleLeft);
+        SetRect(captureText.rectTransform, new Vector2(20f, -60f), new Vector2(330f, 28f), new Vector2(0f, 1f));
+
+        RectTransform progressBack = CreatePanel("Capture Progress Back", levelPanel, progressBackColor);
+        SetRect(progressBack, new Vector2(20f, -94f), new Vector2(400f, 14f), new Vector2(0f, 1f));
+
+        RectTransform livesPanel = CreatePanel("Lives Panel", statusRoot, panelColor);
+        livesPanel.anchorMin = new Vector2(1f, 1f);
+        livesPanel.anchorMax = new Vector2(1f, 1f);
+        livesPanel.pivot = new Vector2(1f, 1f);
+        livesPanel.anchoredPosition = new Vector2(-24f, -24f);
+        livesPanel.sizeDelta = new Vector2(250f, 58f);
+
+        Text livesLabel = CreateText("Lives Label", livesPanel, 20, FontStyle.Bold, TextAnchor.MiddleLeft);
+        SetRect(livesLabel.rectTransform, new Vector2(20f, -20f), new Vector2(86f, 28f), new Vector2(0f, 1f));
+        livesLabel.text = "LIVES";
+
+        RectTransform livesRoot = CreateRect("Lives", livesPanel);
         livesRoot.anchorMin = new Vector2(0f, 1f);
         livesRoot.anchorMax = new Vector2(0f, 1f);
         livesRoot.pivot = new Vector2(0f, 1f);
-        livesRoot.anchoredPosition = new Vector2(20f, -62f);
-        livesRoot.sizeDelta = new Vector2(220f, 28f);
-        BuildLifePips(livesRoot);
-
-        captureText = CreateText("Capture Text", topPanel, 20, FontStyle.Bold, TextAnchor.MiddleLeft);
-        SetRect(captureText.rectTransform, new Vector2(20f, -96f), new Vector2(300f, 28f), new Vector2(0f, 1f));
-
-        RectTransform progressBack = CreatePanel("Capture Progress Back", topPanel, progressBackColor);
-        SetRect(progressBack, new Vector2(20f, -130f), new Vector2(400f, 14f), new Vector2(0f, 1f));
+        livesRoot.anchoredPosition = new Vector2(112f, -22f);
+        livesRoot.sizeDelta = new Vector2(120f, 28f);
+        BuildLifeHearts(livesRoot);
 
         captureFill = CreateImage("Capture Progress Fill", progressBack, progressFillColor);
         captureFill.rectTransform.anchorMin = new Vector2(0f, 0f);
@@ -92,20 +110,25 @@ public sealed class GameHud : MonoBehaviour
         RefreshHud();
     }
 
-    private void BuildLifePips(RectTransform parent)
+    private void BuildLifeHearts(RectTransform parent)
     {
         int lifeCount = Mathf.Max(1, gameManager != null ? gameManager.StartingLives : 3);
-        lifePips = new Image[lifeCount];
+        lifeHearts = new Image[lifeCount];
+        heartSprite ??= CreateHeartSprite();
 
         for (int i = 0; i < lifeCount; i++)
         {
-            Image pip = CreateImage($"Life_{i + 1}", parent, lifeOnColor);
-            pip.rectTransform.anchorMin = new Vector2(0f, 1f);
-            pip.rectTransform.anchorMax = new Vector2(0f, 1f);
-            pip.rectTransform.pivot = new Vector2(0f, 1f);
-            pip.rectTransform.anchoredPosition = new Vector2(i * 34f, 0f);
-            pip.rectTransform.sizeDelta = new Vector2(24f, 24f);
-            lifePips[i] = pip;
+            Image heart = CreateImage($"Life_{i + 1}", parent, lifeOnColor);
+            heart.sprite = heartSprite;
+            heart.type = Image.Type.Simple;
+            heart.preserveAspect = true;
+            heart.color = lifeOnColor;
+            heart.rectTransform.anchorMin = new Vector2(0f, 1f);
+            heart.rectTransform.anchorMax = new Vector2(0f, 1f);
+            heart.rectTransform.pivot = new Vector2(0f, 1f);
+            heart.rectTransform.anchoredPosition = new Vector2(i * 34f, 0f);
+            heart.rectTransform.sizeDelta = new Vector2(28f, 28f);
+            lifeHearts[i] = heart;
         }
     }
 
@@ -157,9 +180,9 @@ public sealed class GameHud : MonoBehaviour
         captureText.text = $"CAPTURED {capturedRounded}% / {requiredRounded}%";
         captureFill.rectTransform.anchorMax = new Vector2(normalizedCapture, 1f);
 
-        for (int i = 0; i < lifePips.Length; i++)
+        for (int i = 0; i < lifeHearts.Length; i++)
         {
-            lifePips[i].color = i < gameManager.Lives ? lifeOnColor : lifeOffColor;
+            lifeHearts[i].color = i < gameManager.Lives ? lifeOnColor : lifeOffColor;
         }
 
         bool showMessage = gameManager.IsMainMenuActive || gameManager.IsGameOver || gameManager.IsLevelComplete;
@@ -288,6 +311,59 @@ public sealed class GameHud : MonoBehaviour
         GameObject rectObject = new GameObject(objectName, typeof(RectTransform));
         rectObject.transform.SetParent(parent, false);
         return rectObject.GetComponent<RectTransform>();
+    }
+
+    private static Sprite CreateHeartSprite()
+    {
+        string[] pattern =
+        {
+            "01100110",
+            "11111111",
+            "11111111",
+            "11111111",
+            "01111110",
+            "00111100",
+            "00011000",
+            "00000000"
+        };
+
+        const int scale = 8;
+        int textureWidth = pattern[0].Length * scale;
+        int textureHeight = pattern.Length * scale;
+        Texture2D texture = new Texture2D(textureWidth, textureHeight, TextureFormat.RGBA32, false)
+        {
+            name = "Generated Heart Sprite",
+            filterMode = FilterMode.Point,
+            wrapMode = TextureWrapMode.Clamp
+        };
+
+        Color[] pixels = new Color[textureWidth * textureHeight];
+        for (int patternY = 0; patternY < pattern.Length; patternY++)
+        {
+            for (int patternX = 0; patternX < pattern[patternY].Length; patternX++)
+            {
+                Color pixelColor = pattern[patternY][patternX] == '1' ? Color.white : Color.clear;
+                for (int offsetY = 0; offsetY < scale; offsetY++)
+                {
+                    for (int offsetX = 0; offsetX < scale; offsetX++)
+                    {
+                        int x = patternX * scale + offsetX;
+                        int y = textureHeight - 1 - (patternY * scale + offsetY);
+                        pixels[y * textureWidth + x] = pixelColor;
+                    }
+                }
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply();
+
+        return Sprite.Create(
+            texture,
+            new Rect(0f, 0f, textureWidth, textureHeight),
+            new Vector2(0.5f, 0.5f),
+            textureWidth
+        );
     }
 
     private static void SetRect(RectTransform rectTransform, Vector2 anchoredPosition, Vector2 size, Vector2 centerAnchor)
