@@ -17,6 +17,8 @@ public sealed class GridManager : MonoBehaviour
     private CellState[,] grid;
     private Renderer[,] tileRenderers;
     private MaterialPropertyBlock tilePropertyBlock;
+    private bool isInitialized;
+    private bool visualsCreated;
 
     public int Width => width;
     public int Height => height;
@@ -24,14 +26,13 @@ public sealed class GridManager : MonoBehaviour
 
     private void Awake()
     {
-        tilePropertyBlock = new MaterialPropertyBlock();
-        InitializeGrid();
-        CreateTileVisuals();
-        RefreshAllTiles();
+        InitializeIfNeeded();
     }
 
     public Vector2Int WorldToGrid(Vector3 worldPosition)
     {
+        InitializeIfNeeded();
+
         return new Vector2Int(
             Mathf.RoundToInt(worldPosition.x / cellSize),
             Mathf.RoundToInt(worldPosition.z / cellSize)
@@ -40,16 +41,22 @@ public sealed class GridManager : MonoBehaviour
 
     public Vector3 GridToWorld(Vector2Int gridPosition)
     {
+        InitializeIfNeeded();
+
         return new Vector3(gridPosition.x * cellSize, 0f, gridPosition.y * cellSize);
     }
 
     public bool IsInsideGrid(Vector2Int cell)
     {
+        InitializeIfNeeded();
+
         return cell.x >= 0 && cell.x < width && cell.y >= 0 && cell.y < height;
     }
 
     public CellState GetCellState(Vector2Int cell)
     {
+        InitializeIfNeeded();
+
         if (!IsInsideGrid(cell))
         {
             return CellState.Claimed;
@@ -60,6 +67,8 @@ public sealed class GridManager : MonoBehaviour
 
     public void SetCellState(Vector2Int cell, CellState state)
     {
+        InitializeIfNeeded();
+
         if (!IsInsideGrid(cell))
         {
             return;
@@ -71,7 +80,23 @@ public sealed class GridManager : MonoBehaviour
 
     public bool IsBlockedForBall(Vector2Int cell)
     {
+        InitializeIfNeeded();
+
         return !IsInsideGrid(cell) || GetCellState(cell) != CellState.Unclaimed;
+    }
+
+    private void InitializeIfNeeded()
+    {
+        if (isInitialized)
+        {
+            return;
+        }
+
+        tilePropertyBlock ??= new MaterialPropertyBlock();
+        InitializeGrid();
+        isInitialized = true;
+        CreateTileVisuals();
+        RefreshAllTiles();
     }
 
     private void InitializeGrid()
@@ -90,6 +115,11 @@ public sealed class GridManager : MonoBehaviour
 
     private void CreateTileVisuals()
     {
+        if (visualsCreated)
+        {
+            return;
+        }
+
         if (tileRoot == null)
         {
             GameObject rootObject = new GameObject("Tiles");
@@ -112,6 +142,8 @@ public sealed class GridManager : MonoBehaviour
                 tileRenderers[x, y] = tile.GetComponent<Renderer>();
             }
         }
+
+        visualsCreated = true;
     }
 
     private void RefreshAllTiles()
