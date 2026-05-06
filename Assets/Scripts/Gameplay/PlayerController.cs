@@ -5,6 +5,7 @@ public sealed class PlayerController : MonoBehaviour
     [Header("References")]
     [SerializeField] private GridManager gridManager;
     [SerializeField] private TerritoryManager territoryManager;
+    [SerializeField] private GameManager gameManager;
 
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 7f;
@@ -31,6 +32,11 @@ public sealed class PlayerController : MonoBehaviour
             territoryManager = FindFirstObjectByType<TerritoryManager>();
         }
 
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+
         currentCell = spawnCell;
         targetCell = spawnCell;
         transform.position = GetPlayerWorldPosition(spawnCell);
@@ -39,6 +45,11 @@ public sealed class PlayerController : MonoBehaviour
 
     private void Update()
     {
+        if (gameManager != null && gameManager.IsGameOver)
+        {
+            return;
+        }
+
         QueueDrawingDirectionInput();
 
         if (isMoving)

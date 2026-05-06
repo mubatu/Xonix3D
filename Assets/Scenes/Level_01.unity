@@ -486,11 +486,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   gridManager: {fileID: 838259489}
+  territoryManager: {fileID: 553481386}
+  playerController: {fileID: 1401430782}
+  gameManager: {fileID: 1078400845}
   spawnCell: {x: 28, y: 28}
   groundOffset: 0.65
   speed: 10
   direction: {x: -0.856287, y: 0.5165003}
   hitRadius: 0.9
+  playerHitRadius: 0.45
   ballColor: {r: 0.92, g: 0.18, b: 0.18, a: 1}
 --- !u!135 &980320804
 SphereCollider:
@@ -563,6 +567,53 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 980320801}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1078400844
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1078400846}
+  - component: {fileID: 1078400845}
+  m_Layer: 0
+  m_Name: GameManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1078400845
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1078400844}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dfb07729ec47f42c18139eea8b9b4788, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  playerController: {fileID: 1401430782}
+  territoryManager: {fileID: 553481386}
+  startingLives: 3
+--- !u!4 &1078400846
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1078400844}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 3, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1401430781
 GameObject:
   m_ObjectHideFlags: 0
@@ -597,6 +648,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   gridManager: {fileID: 838259489}
   territoryManager: {fileID: 553481386}
+  gameManager: {fileID: 1078400845}
   moveSpeed: 20
   spawnCell: {x: 20, y: 0}
   groundOffset: 2
@@ -736,11 +788,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   gridManager: {fileID: 838259489}
+  territoryManager: {fileID: 553481386}
+  playerController: {fileID: 1401430782}
+  gameManager: {fileID: 1078400845}
   spawnCell: {x: 12, y: 24}
   groundOffset: 0.65
   speed: 10
   direction: {x: 0.7976006, y: 0.60318595}
   hitRadius: 0.9
+  playerHitRadius: 0.45
   ballColor: {r: 0.92, g: 0.18, b: 0.18, a: 1}
 --- !u!135 &1832600190
 SphereCollider:
@@ -823,3 +879,4 @@ SceneRoots:
   - {fileID: 1401430786}
   - {fileID: 553481387}
   - {fileID: 786304462}
+  - {fileID: 1078400846}

@@ -7,6 +7,9 @@ public sealed class BallController : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private GridManager gridManager;
+    [SerializeField] private TerritoryManager territoryManager;
+    [SerializeField] private PlayerController playerController;
+    [SerializeField] private GameManager gameManager;
 
     [Header("Spawn")]
     [SerializeField] private Vector2Int spawnCell = new Vector2Int(12, 24);
@@ -16,6 +19,7 @@ public sealed class BallController : MonoBehaviour
     [SerializeField] private float speed = 4f;
     [SerializeField] private Vector2 direction = new Vector2(1f, 1f);
     [SerializeField] private float hitRadius = 0.45f;
+    [SerializeField] private float playerHitRadius = 0.45f;
 
     [Header("Visuals")]
     [SerializeField] private Color ballColor = new Color(0.92f, 0.18f, 0.18f);
@@ -31,6 +35,21 @@ public sealed class BallController : MonoBehaviour
         if (gridManager == null)
         {
             gridManager = FindFirstObjectByType<GridManager>();
+        }
+
+        if (territoryManager == null)
+        {
+            territoryManager = FindFirstObjectByType<TerritoryManager>();
+        }
+
+        if (playerController == null)
+        {
+            playerController = FindFirstObjectByType<PlayerController>();
+        }
+
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
         }
 
         ballRenderer = GetComponentInChildren<Renderer>();
@@ -54,8 +73,14 @@ public sealed class BallController : MonoBehaviour
 
     private void Update()
     {
+        if (gameManager != null && gameManager.IsGameOver)
+        {
+            return;
+        }
+
         MoveBall();
         CheckBallCollisions();
+        CheckPlayerHit();
     }
 
     private void OnDisable()
@@ -79,9 +104,20 @@ public sealed class BallController : MonoBehaviour
         Vector3 frameMovement = new Vector3(direction.x, 0f, direction.y) * (speed * Time.deltaTime);
         Vector3 nextPosition = currentPosition + frameMovement;
 
-        bool blockedX = IsBlockedAt(new Vector3(nextPosition.x, currentPosition.y, currentPosition.z));
-        bool blockedZ = IsBlockedAt(new Vector3(currentPosition.x, currentPosition.y, nextPosition.z));
-        bool blockedDiagonal = IsBlockedAt(nextPosition);
+        CellState stateX = GetCellStateAt(new Vector3(nextPosition.x, currentPosition.y, currentPosition.z));
+        CellState stateZ = GetCellStateAt(new Vector3(currentPosition.x, currentPosition.y, nextPosition.z));
+        CellState stateDiagonal = GetCellStateAt(nextPosition);
+
+        bool blockedX = stateX != CellState.Unclaimed;
+        bool blockedZ = stateZ != CellState.Unclaimed;
+        bool blockedDiagonal = stateDiagonal != CellState.Unclaimed;
+
+        if (stateX == CellState.TemporaryPath
+            || stateZ == CellState.TemporaryPath
+            || stateDiagonal == CellState.TemporaryPath)
+        {
+            gameManager?.HandlePlayerDeath();
+        }
 
         if (blockedX)
         {
@@ -102,7 +138,7 @@ public sealed class BallController : MonoBehaviour
 
         Vector3 correctedMovement = new Vector3(direction.x, 0f, direction.y) * (speed * Time.deltaTime);
         Vector3 correctedPosition = currentPosition + correctedMovement;
-        if (!IsBlockedAt(correctedPosition))
+        if (GetCellStateAt(correctedPosition) == CellState.Unclaimed)
         {
             transform.position = correctedPosition;
         }
@@ -135,10 +171,30 @@ public sealed class BallController : MonoBehaviour
         }
     }
 
-    private bool IsBlockedAt(Vector3 worldPosition)
+    private void CheckPlayerHit()
+    {
+        if (territoryManager == null || playerController == null || gameManager == null)
+        {
+            return;
+        }
+
+        if (!territoryManager.IsDrawing)
+        {
+            return;
+        }
+
+        float hitDistance = hitRadius + playerHitRadius;
+        Vector2 toPlayer = GetXZ(playerController.transform.position) - GetXZ(transform.position);
+        if (toPlayer.sqrMagnitude <= hitDistance * hitDistance)
+        {
+            gameManager.HandlePlayerDeath();
+        }
+    }
+
+    private CellState GetCellStateAt(Vector3 worldPosition)
     {
         Vector2Int cell = gridManager.WorldToGrid(worldPosition);
-        return gridManager.IsBlockedForBall(cell);
+        return gridManager.GetCellState(cell);
     }
 
     private Vector3 GetBallWorldPosition(Vector2Int cell)
