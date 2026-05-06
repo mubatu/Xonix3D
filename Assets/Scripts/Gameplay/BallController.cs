@@ -29,6 +29,7 @@ public sealed class BallController : MonoBehaviour
 
     public Vector2 Direction => direction;
     public float HitRadius => hitRadius;
+    public Vector2Int CurrentCell => gridManager != null ? gridManager.WorldToGrid(transform.position) : spawnCell;
 
     private void Awake()
     {
