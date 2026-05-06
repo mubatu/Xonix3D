@@ -15,6 +15,9 @@ public sealed class PlayerController : MonoBehaviour
     [SerializeField] private float turnSpeed = 16f;
 
     [Header("Visuals")]
+    [Tooltip("Optional model root. If empty, all renderers under the Player object are used.")]
+    [SerializeField] private Transform visualRoot;
+    [SerializeField] private bool overrideVisualColor = true;
     [SerializeField] private Color playerColor = new Color(0.12f, 0.44f, 1f);
 
     private Vector2Int currentCell;
@@ -22,7 +25,7 @@ public sealed class PlayerController : MonoBehaviour
     private Vector2Int activeDirection;
     private Vector2Int queuedDrawingDirection;
     private bool isMoving;
-    private Renderer playerRenderer;
+    private Renderer[] playerRenderers;
     private MaterialPropertyBlock propertyBlock;
     private Vector3 startingScale;
 
@@ -45,7 +48,7 @@ public sealed class PlayerController : MonoBehaviour
             gameManager = FindFirstObjectByType<GameManager>();
         }
 
-        playerRenderer = GetComponentInChildren<Renderer>();
+        CacheVisualRenderers();
         propertyBlock = new MaterialPropertyBlock();
         startingScale = transform.localScale;
         ApplyColor();
@@ -273,23 +276,51 @@ public sealed class PlayerController : MonoBehaviour
 
     private void ApplyColor()
     {
-        if (playerRenderer == null)
+        if (playerRenderers == null || playerRenderers.Length == 0)
         {
             return;
         }
 
-        playerRenderer.GetPropertyBlock(propertyBlock);
-        propertyBlock.SetColor("_Color", playerColor);
-        propertyBlock.SetColor("_BaseColor", playerColor);
-        playerRenderer.SetPropertyBlock(propertyBlock);
+        foreach (Renderer playerRenderer in playerRenderers)
+        {
+            if (playerRenderer == null)
+            {
+                continue;
+            }
+
+            if (!overrideVisualColor)
+            {
+                playerRenderer.SetPropertyBlock(null);
+                continue;
+            }
+
+            playerRenderer.GetPropertyBlock(propertyBlock);
+            propertyBlock.SetColor("_Color", playerColor);
+            propertyBlock.SetColor("_BaseColor", playerColor);
+            playerRenderer.SetPropertyBlock(propertyBlock);
+        }
     }
 
     private void SetVisible(bool visible)
     {
-        if (playerRenderer != null)
+        if (playerRenderers == null)
         {
-            playerRenderer.enabled = visible;
+            return;
         }
+
+        foreach (Renderer playerRenderer in playerRenderers)
+        {
+            if (playerRenderer != null)
+            {
+                playerRenderer.enabled = visible;
+            }
+        }
+    }
+
+    private void CacheVisualRenderers()
+    {
+        Transform rendererRoot = visualRoot != null ? visualRoot : transform;
+        playerRenderers = rendererRoot.GetComponentsInChildren<Renderer>(true);
     }
 
     private static bool IsSameOrOppositeDirection(Vector2Int direction, Vector2Int otherDirection)
