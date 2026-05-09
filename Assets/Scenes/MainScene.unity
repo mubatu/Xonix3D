@@ -507,6 +507,7 @@ MonoBehaviour:
   direction: {x: -0.856287, y: 0.5165003}
   hitRadius: 0.9
   playerHitRadius: 0.45
+  wallProbeDistance: 1
   overrideBallColor: 0
   ballColor: {r: 0.92, g: 0.18, b: 0.18, a: 1}
   createTrail: 1
@@ -853,6 +854,7 @@ MonoBehaviour:
   direction: {x: 0.7976006, y: 0.60318595}
   hitRadius: 0.9
   playerHitRadius: 0.45
+  wallProbeDistance: 1
   overrideBallColor: 0
   ballColor: {r: 0.92, g: 0.18, b: 0.18, a: 1}
   createTrail: 1

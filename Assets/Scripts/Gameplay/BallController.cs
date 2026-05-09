@@ -20,6 +20,7 @@ public sealed class BallController : MonoBehaviour
     [SerializeField] private Vector2 direction = new Vector2(1f, 1f);
     [SerializeField] private float hitRadius = 0.45f;
     [SerializeField] private float playerHitRadius = 0.45f;
+    [SerializeField] private float wallProbeDistance = 0.45f;
 
     [Header("Visuals")]
     [SerializeField] private bool overrideBallColor;
@@ -38,6 +39,18 @@ public sealed class BallController : MonoBehaviour
     public Vector2 Direction => direction;
     public float HitRadius => hitRadius;
     public Vector2Int CurrentCell => gridManager != null ? gridManager.WorldToGrid(transform.position) : spawnCell;
+
+    private readonly struct ProbeCollisionInfo
+    {
+        public ProbeCollisionInfo(bool isBlocked, bool touchedTemporaryPath)
+        {
+            IsBlocked = isBlocked;
+            TouchedTemporaryPath = touchedTemporaryPath;
+        }
+
+        public bool IsBlocked { get; }
+        public bool TouchedTemporaryPath { get; }
+    }
 
     private void Awake()
     {
@@ -151,24 +164,74 @@ public sealed class BallController : MonoBehaviour
             return;
         }
 
+        float frameDistance = speed * Time.deltaTime;
+        if (frameDistance <= 0f)
+        {
+            return;
+        }
+
+        float maxStepDistance = Mathf.Max(0.05f, gridManager.CellSize * 0.25f);
+        int stepCount = Mathf.Max(1, Mathf.CeilToInt(frameDistance / maxStepDistance));
+        float stepDistance = frameDistance / stepCount;
+
+        for (int i = 0; i < stepCount; i++)
+        {
+            Vector3 stepMovement = new Vector3(direction.x, 0f, direction.y) * stepDistance;
+            MoveBallStep(stepMovement);
+        }
+    }
+
+    private void MoveBallStep(Vector3 movement)
+    {
+        if (movement.sqrMagnitude < 0.000001f)
+        {
+            return;
+        }
+
         Vector3 currentPosition = transform.position;
-        Vector3 frameMovement = new Vector3(direction.x, 0f, direction.y) * (speed * Time.deltaTime);
-        Vector3 nextPosition = currentPosition + frameMovement;
-
-        CellState stateX = GetCellStateAt(new Vector3(nextPosition.x, currentPosition.y, currentPosition.z));
-        CellState stateZ = GetCellStateAt(new Vector3(currentPosition.x, currentPosition.y, nextPosition.z));
-        CellState stateDiagonal = GetCellStateAt(nextPosition);
-
-        bool blockedX = stateX != CellState.Unclaimed;
-        bool blockedZ = stateZ != CellState.Unclaimed;
-        bool blockedDiagonal = stateDiagonal != CellState.Unclaimed;
-
-        if (stateX == CellState.TemporaryPath
-            || stateZ == CellState.TemporaryPath
-            || stateDiagonal == CellState.TemporaryPath)
+        ProbeCollisionInfo currentCollision = GetProbeCollisionAt(currentPosition);
+        if (currentCollision.TouchedTemporaryPath)
         {
             gameManager?.HandlePlayerDeath();
         }
+
+        Vector3 nextPosition = currentPosition + movement;
+        ProbeCollisionInfo nextCollision = GetProbeCollisionAt(nextPosition);
+        if (!nextCollision.IsBlocked)
+        {
+            transform.position = nextPosition;
+            RollVisual(movement);
+            return;
+        }
+
+        if (nextCollision.TouchedTemporaryPath)
+        {
+            gameManager?.HandlePlayerDeath();
+        }
+
+        Vector3 lastSafePosition = FindLastSafePosition(currentPosition, movement);
+        Vector3 actualMovement = lastSafePosition - currentPosition;
+        if (actualMovement.sqrMagnitude > 0.000001f)
+        {
+            transform.position = lastSafePosition;
+            RollVisual(actualMovement);
+        }
+
+        ReflectFromCollision(currentPosition, movement);
+    }
+
+    private void ReflectFromCollision(Vector3 currentPosition, Vector3 movement)
+    {
+        ProbeCollisionInfo xCollision = GetProbeCollisionAt(currentPosition + new Vector3(movement.x, 0f, 0f), true, false);
+        ProbeCollisionInfo zCollision = GetProbeCollisionAt(currentPosition + new Vector3(0f, 0f, movement.z), false, true);
+
+        if (xCollision.TouchedTemporaryPath || zCollision.TouchedTemporaryPath)
+        {
+            gameManager?.HandlePlayerDeath();
+        }
+
+        bool blockedX = xCollision.IsBlocked;
+        bool blockedZ = zCollision.IsBlocked;
 
         if (blockedX)
         {
@@ -180,20 +243,34 @@ public sealed class BallController : MonoBehaviour
             direction.y *= -1f;
         }
 
-        if (!blockedX && !blockedZ && blockedDiagonal)
+        if (!blockedX && !blockedZ)
         {
             direction *= -1f;
         }
 
         NormalizeDirection();
+    }
 
-        Vector3 correctedMovement = new Vector3(direction.x, 0f, direction.y) * (speed * Time.deltaTime);
-        Vector3 correctedPosition = currentPosition + correctedMovement;
-        if (GetCellStateAt(correctedPosition) == CellState.Unclaimed)
+    private Vector3 FindLastSafePosition(Vector3 startPosition, Vector3 movement)
+    {
+        float safeT = 0f;
+        float blockedT = 1f;
+
+        for (int i = 0; i < 8; i++)
         {
-            transform.position = correctedPosition;
-            RollVisual(correctedMovement);
+            float testT = (safeT + blockedT) * 0.5f;
+            Vector3 testPosition = startPosition + movement * testT;
+            if (GetProbeCollisionAt(testPosition).IsBlocked)
+            {
+                blockedT = testT;
+            }
+            else
+            {
+                safeT = testT;
+            }
         }
+
+        return startPosition + movement * safeT;
     }
 
     private void CheckBallCollisions()
@@ -243,10 +320,50 @@ public sealed class BallController : MonoBehaviour
         }
     }
 
+    private ProbeCollisionInfo GetProbeCollisionAt(Vector3 worldPosition, bool checkX = true, bool checkZ = true)
+    {
+        bool isBlocked = false;
+        bool touchedTemporaryPath = false;
+        float probeDistance = GetWallProbeDistance();
+
+        if (checkX && Mathf.Abs(direction.x) > 0.0001f)
+        {
+            CellState xState = GetCellStateAt(worldPosition + new Vector3(Mathf.Sign(direction.x) * probeDistance, 0f, 0f));
+            isBlocked |= xState != CellState.Unclaimed;
+            touchedTemporaryPath |= xState == CellState.TemporaryPath;
+        }
+
+        if (checkZ && Mathf.Abs(direction.y) > 0.0001f)
+        {
+            CellState zState = GetCellStateAt(worldPosition + new Vector3(0f, 0f, Mathf.Sign(direction.y) * probeDistance));
+            isBlocked |= zState != CellState.Unclaimed;
+            touchedTemporaryPath |= zState == CellState.TemporaryPath;
+        }
+
+        if (checkX && checkZ && Mathf.Abs(direction.x) > 0.0001f && Mathf.Abs(direction.y) > 0.0001f)
+        {
+            Vector3 diagonalProbe = worldPosition + new Vector3(
+                Mathf.Sign(direction.x) * probeDistance,
+                0f,
+                Mathf.Sign(direction.y) * probeDistance
+            );
+            CellState diagonalState = GetCellStateAt(diagonalProbe);
+            isBlocked |= diagonalState != CellState.Unclaimed;
+            touchedTemporaryPath |= diagonalState == CellState.TemporaryPath;
+        }
+
+        return new ProbeCollisionInfo(isBlocked, touchedTemporaryPath);
+    }
+
     private CellState GetCellStateAt(Vector3 worldPosition)
     {
         Vector2Int cell = gridManager.WorldToGrid(worldPosition);
         return gridManager.GetCellState(cell);
+    }
+
+    private float GetWallProbeDistance()
+    {
+        return Mathf.Clamp(wallProbeDistance, 0.01f, gridManager.CellSize * 0.49f);
     }
 
     private Vector3 GetBallWorldPosition(Vector2Int cell)
