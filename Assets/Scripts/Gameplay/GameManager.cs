@@ -8,6 +8,8 @@ public sealed class GameManager : MonoBehaviour
     [SerializeField] private GridManager gridManager;
     [SerializeField] private PlayerController playerController;
     [SerializeField] private TerritoryManager territoryManager;
+    [SerializeField] private BallController ballPrefab;
+    [SerializeField] private Transform ballsRoot;
     [SerializeField] private BallController[] balls;
 
     [Header("Level Data")]
@@ -199,9 +201,9 @@ public sealed class GameManager : MonoBehaviour
         }
 
         RefreshBallReferencesIfNeeded();
-        if (balls == null || balls.Length == 0)
+        if ((balls == null || balls.Length == 0) && ballPrefab == null)
         {
-            Debug.LogWarning("Level JSON contains balls, but the scene has no BallController template.");
+            Debug.LogWarning("Level JSON contains balls, but GameManager has no ball prefab or scene ball template.");
             return;
         }
 
@@ -221,20 +223,26 @@ public sealed class GameManager : MonoBehaviour
 
     private BallController[] EnsureBallCount(int requestedCount)
     {
-        if (balls.Length >= requestedCount)
+        int currentCount = balls != null ? balls.Length : 0;
+        if (currentCount >= requestedCount)
         {
             return balls;
         }
 
         BallController[] expandedBalls = new BallController[requestedCount];
-        for (int i = 0; i < balls.Length; i++)
+        for (int i = 0; i < currentCount; i++)
         {
             expandedBalls[i] = balls[i];
         }
 
-        BallController template = balls[0];
-        Transform parent = template.transform.parent;
-        for (int i = balls.Length; i < requestedCount; i++)
+        BallController template = GetBallTemplate();
+        if (template == null)
+        {
+            return expandedBalls;
+        }
+
+        Transform parent = GetBallsParent(template);
+        for (int i = currentCount; i < requestedCount; i++)
         {
             BallController newBall = Instantiate(template, parent);
             newBall.name = $"Ball_{i + 1:00}";
@@ -242,6 +250,39 @@ public sealed class GameManager : MonoBehaviour
         }
 
         return expandedBalls;
+    }
+
+    private BallController GetBallTemplate()
+    {
+        if (ballPrefab != null)
+        {
+            return ballPrefab;
+        }
+
+        if (balls != null && balls.Length > 0)
+        {
+            return balls[0];
+        }
+
+        return null;
+    }
+
+    private Transform GetBallsParent(BallController template)
+    {
+        if (ballsRoot != null)
+        {
+            return ballsRoot;
+        }
+
+        if (template != null && template.gameObject.scene.IsValid() && template.transform.parent != null)
+        {
+            ballsRoot = template.transform.parent;
+            return ballsRoot;
+        }
+
+        GameObject rootObject = new GameObject("Balls");
+        ballsRoot = rootObject.transform;
+        return ballsRoot;
     }
 
     public void StartGame()
@@ -385,6 +426,7 @@ public sealed class GameManager : MonoBehaviour
         }
 
         balls = FindObjectsByType<BallController>(FindObjectsSortMode.None);
+        Array.Sort(balls, (left, right) => string.Compare(left.name, right.name, StringComparison.Ordinal));
     }
 
     private void EnsureHudExists()
