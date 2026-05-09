@@ -42,14 +42,16 @@ public sealed class BallController : MonoBehaviour
 
     private readonly struct ProbeCollisionInfo
     {
-        public ProbeCollisionInfo(bool isBlocked, bool touchedTemporaryPath)
+        public ProbeCollisionInfo(bool isBlocked, bool touchedPath, Vector2Int pathCell)
         {
             IsBlocked = isBlocked;
-            TouchedTemporaryPath = touchedTemporaryPath;
+            TouchedPath = touchedPath;
+            PathCell = pathCell;
         }
 
         public bool IsBlocked { get; }
-        public bool TouchedTemporaryPath { get; }
+        public bool TouchedPath { get; }
+        public Vector2Int PathCell { get; }
     }
 
     private void Awake()
@@ -190,9 +192,9 @@ public sealed class BallController : MonoBehaviour
 
         Vector3 currentPosition = transform.position;
         ProbeCollisionInfo currentCollision = GetProbeCollisionAt(currentPosition);
-        if (currentCollision.TouchedTemporaryPath)
+        if (currentCollision.TouchedPath)
         {
-            gameManager?.HandlePlayerDeath();
+            territoryManager?.HandleBallTouchedPath(currentCollision.PathCell);
         }
 
         Vector3 nextPosition = currentPosition + movement;
@@ -204,9 +206,9 @@ public sealed class BallController : MonoBehaviour
             return;
         }
 
-        if (nextCollision.TouchedTemporaryPath)
+        if (nextCollision.TouchedPath)
         {
-            gameManager?.HandlePlayerDeath();
+            territoryManager?.HandleBallTouchedPath(nextCollision.PathCell);
         }
 
         Vector3 lastSafePosition = FindLastSafePosition(currentPosition, movement);
@@ -225,9 +227,14 @@ public sealed class BallController : MonoBehaviour
         ProbeCollisionInfo xCollision = GetProbeCollisionAt(currentPosition + new Vector3(movement.x, 0f, 0f), true, false);
         ProbeCollisionInfo zCollision = GetProbeCollisionAt(currentPosition + new Vector3(0f, 0f, movement.z), false, true);
 
-        if (xCollision.TouchedTemporaryPath || zCollision.TouchedTemporaryPath)
+        if (xCollision.TouchedPath)
         {
-            gameManager?.HandlePlayerDeath();
+            territoryManager?.HandleBallTouchedPath(xCollision.PathCell);
+        }
+
+        if (zCollision.TouchedPath)
+        {
+            territoryManager?.HandleBallTouchedPath(zCollision.PathCell);
         }
 
         bool blockedX = xCollision.IsBlocked;
@@ -323,21 +330,24 @@ public sealed class BallController : MonoBehaviour
     private ProbeCollisionInfo GetProbeCollisionAt(Vector3 worldPosition, bool checkX = true, bool checkZ = true)
     {
         bool isBlocked = false;
-        bool touchedTemporaryPath = false;
+        bool touchedPath = false;
+        Vector2Int pathCell = Vector2Int.zero;
         float probeDistance = GetWallProbeDistance();
 
         if (checkX && Mathf.Abs(direction.x) > 0.0001f)
         {
-            CellState xState = GetCellStateAt(worldPosition + new Vector3(Mathf.Sign(direction.x) * probeDistance, 0f, 0f));
+            Vector2Int xCell = GetCellAt(worldPosition + new Vector3(Mathf.Sign(direction.x) * probeDistance, 0f, 0f));
+            CellState xState = gridManager.GetCellState(xCell);
             isBlocked |= xState != CellState.Unclaimed;
-            touchedTemporaryPath |= xState == CellState.TemporaryPath;
+            CapturePathContact(xState, xCell, ref touchedPath, ref pathCell);
         }
 
         if (checkZ && Mathf.Abs(direction.y) > 0.0001f)
         {
-            CellState zState = GetCellStateAt(worldPosition + new Vector3(0f, 0f, Mathf.Sign(direction.y) * probeDistance));
+            Vector2Int zCell = GetCellAt(worldPosition + new Vector3(0f, 0f, Mathf.Sign(direction.y) * probeDistance));
+            CellState zState = gridManager.GetCellState(zCell);
             isBlocked |= zState != CellState.Unclaimed;
-            touchedTemporaryPath |= zState == CellState.TemporaryPath;
+            CapturePathContact(zState, zCell, ref touchedPath, ref pathCell);
         }
 
         if (checkX && checkZ && Mathf.Abs(direction.x) > 0.0001f && Mathf.Abs(direction.y) > 0.0001f)
@@ -347,18 +357,33 @@ public sealed class BallController : MonoBehaviour
                 0f,
                 Mathf.Sign(direction.y) * probeDistance
             );
-            CellState diagonalState = GetCellStateAt(diagonalProbe);
+            Vector2Int diagonalCell = GetCellAt(diagonalProbe);
+            CellState diagonalState = gridManager.GetCellState(diagonalCell);
             isBlocked |= diagonalState != CellState.Unclaimed;
-            touchedTemporaryPath |= diagonalState == CellState.TemporaryPath;
+            CapturePathContact(diagonalState, diagonalCell, ref touchedPath, ref pathCell);
         }
 
-        return new ProbeCollisionInfo(isBlocked, touchedTemporaryPath);
+        return new ProbeCollisionInfo(isBlocked, touchedPath, pathCell);
     }
 
-    private CellState GetCellStateAt(Vector3 worldPosition)
+    private Vector2Int GetCellAt(Vector3 worldPosition)
     {
-        Vector2Int cell = gridManager.WorldToGrid(worldPosition);
-        return gridManager.GetCellState(cell);
+        return gridManager.WorldToGrid(worldPosition);
+    }
+
+    private static void CapturePathContact(CellState cellState, Vector2Int cell, ref bool touchedPath, ref Vector2Int pathCell)
+    {
+        if (cellState != CellState.TemporaryPath && cellState != CellState.BurningPath)
+        {
+            return;
+        }
+
+        if (!touchedPath)
+        {
+            pathCell = cell;
+        }
+
+        touchedPath = true;
     }
 
     private float GetWallProbeDistance()

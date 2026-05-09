@@ -437,11 +437,11 @@ public sealed class GridManager : MonoBehaviour
         CellState state = grid[cell.x, cell.y];
         Renderer pathTileRenderer = pathTileRenderers[cell.x, cell.y];
 
-        if (state == CellState.TemporaryPath)
+        if (state == CellState.TemporaryPath || state == CellState.BurningPath)
         {
             pathTileRenderer ??= CreatePathTileRenderer(cell);
             ConfigurePathTileTransform(cell);
-            ApplyRendererMaterialAndColor(pathTileRenderer, temporaryPathMaterial, GetColorForState(CellState.TemporaryPath));
+            ApplyRendererMaterialAndColor(pathTileRenderer, temporaryPathMaterial, GetColorForState(state));
             pathTileRenderer.gameObject.SetActive(true);
         }
         else if (pathTileRenderer != null)
@@ -725,7 +725,7 @@ public sealed class GridManager : MonoBehaviour
         return meshState switch
         {
             CellState.Claimed => state == CellState.Claimed,
-            CellState.Unclaimed => state == CellState.Unclaimed || state == CellState.TemporaryPath,
+            CellState.Unclaimed => state == CellState.Unclaimed || state == CellState.TemporaryPath || state == CellState.BurningPath,
             _ => false
         };
     }
@@ -844,6 +844,7 @@ public sealed class GridManager : MonoBehaviour
         {
             CellState.Claimed => new Color(0.18f, 0.72f, 0.34f),
             CellState.TemporaryPath => new Color(1f, 0.54f, 0.16f),
+            CellState.BurningPath => new Color(1f, 0.04f, 0.03f),
             _ => new Color(0.34f, 0.36f, 0.38f)
         };
     }

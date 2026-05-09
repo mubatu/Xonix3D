@@ -233,7 +233,8 @@ public sealed class PlayerController : MonoBehaviour
             return;
         }
 
-        if (gridManager.GetCellState(nextCell) == CellState.TemporaryPath)
+        CellState nextState = gridManager.GetCellState(nextCell);
+        if (nextState == CellState.TemporaryPath || nextState == CellState.BurningPath)
         {
             gameManager?.HandlePlayerDeath();
             return;

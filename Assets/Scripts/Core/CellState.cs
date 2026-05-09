@@ -2,5 +2,6 @@ public enum CellState
 {
     Unclaimed,
     Claimed,
-    TemporaryPath
+    TemporaryPath,
+    BurningPath
 }

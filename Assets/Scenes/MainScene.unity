@@ -153,7 +153,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   gridManager: {fileID: 838259489}
   gameManager: {fileID: 1078400845}
+  playerController: {fileID: 0}
   balls: []
+  pathBurnSpreadInterval: 0.02
 --- !u!4 &553481387
 Transform:
   m_ObjectHideFlags: 0
