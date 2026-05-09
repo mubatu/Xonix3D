@@ -78,11 +78,12 @@ Goal: Add two scripted balls.
 Tasks:
 
 - Add ball objects.
+- Create a reusable `Ball` prefab for shared visuals and default movement settings.
 - Implement `BallController`.
 - Give each ball initial direction and speed.
 - Move balls continuously.
 - Bounce balls from claimed cells and arena bounds.
-- Bounce balls from temporary path cells after triggering player death.
+- Bounce balls from temporary path cells after notifying the path danger system.
 - Bounce balls away from each other when they collide.
 - Keep balls inside unclaimed territory.
 
@@ -97,6 +98,9 @@ Goal: Implement losing lives.
 Tasks:
 
 - Detect ball hitting temporary path.
+- Turn hit temporary path cells into red burning path cells.
+- Spread burning path danger along the active path in both directions.
+- Kill the player if burning path reaches them before path completion.
 - Detect ball hitting player while drawing.
 - Implement `GameManager.HandlePlayerDeath()`.
 - Remove temporary path on death.
@@ -118,6 +122,7 @@ Tasks:
 - Run flood fill from ball cells.
 - Convert unreachable unclaimed cells to claimed.
 - Convert temporary path to claimed.
+- If the path is damaged by burning cells, convert only surviving orange path cells to claimed and break red cells back to unclaimed.
 - Recalculate captured percentage, including the initial claimed border.
 - Update visuals instantly for the first implementation.
 

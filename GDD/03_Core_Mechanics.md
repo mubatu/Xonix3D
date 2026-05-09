@@ -38,6 +38,7 @@ Legend:
 C = Claimed
 U = Unclaimed
 T = Temporary Path
+B = Burning Path
 ```
 
 The border starts as claimed. The center starts as unclaimed.
@@ -106,6 +107,25 @@ The path remains active until:
 1. The player returns to claimed territory, or
 2. The player dies.
 
+## Burning Path Danger
+
+When a ball touches an active `TemporaryPath` cell, that cell becomes `BurningPath` instead of killing the player instantly:
+
+```text
+TemporaryPath -> BurningPath
+```
+
+The burning path then spreads along the ordered temporary path list in both directions. It does not spread into arbitrary neighboring unclaimed cells; it follows only the path the player has drawn.
+
+Recommended first implementation:
+
+- Store the active path as an ordered list of cells.
+- Store burning path indices in that list.
+- When a ball hits the path, ignite the closest temporary path index.
+- On each spread tick, ignite `index - 1` and `index + 1` for every currently burning index.
+- If a burning index reaches the player's current path cell before the player reaches claimed territory, the player dies.
+- If the player reaches claimed territory first, the red cells break away and the surviving orange cells become claimed wall.
+
 ## Invalid Movement Cases
 
 The player should not be allowed to:
@@ -125,7 +145,7 @@ When the player closes a path, determine which unclaimed cells are still reachab
 
 ### Steps
 
-1. Treat `Claimed` cells and `TemporaryPath` cells as blocked.
+1. Treat `Claimed`, `TemporaryPath`, and `BurningPath` cells as blocked.
 2. Start flood fill from each ball's current grid cell.
 3. Mark every reachable `Unclaimed` cell as safe-from-capture.
 4. Any `Unclaimed` cell not reached by flood fill becomes `Claimed`.
@@ -133,10 +153,21 @@ When the player closes a path, determine which unclaimed cells are still reachab
 6. Clear the temporary path list.
 7. Recalculate captured percentage.
 
+If the path contains `BurningPath` cells at completion, use damaged path completion instead of flood-fill capture:
+
+1. Convert `BurningPath` cells back to `Unclaimed`.
+2. Convert remaining `TemporaryPath` cells to `Claimed`.
+3. Clear the temporary path and burning path lists.
+4. Recalculate captured percentage.
+
 ### Pseudocode
 
 ```text
 function CompletePath():
+    if burningPath is not empty:
+        CompleteDamagedPath()
+        return
+
     reachable = empty boolean grid
 
     for each ball:
@@ -162,6 +193,7 @@ It cannot pass through:
 
 - Claimed cells
 - Temporary path cells
+- Burning path cells
 - Arena boundary outside the grid
 
 ## Ball Movement
@@ -190,7 +222,8 @@ A ball should bounce when its next position would enter:
 
 - Claimed territory
 - Outside arena bounds
-- Temporary path territory, after triggering player death
+- Temporary path territory, after igniting the touched path cell
+- Burning path territory
 - Another ball
 
 Recommended simple reflection:
@@ -204,14 +237,16 @@ If colliding with another ball, reflect both balls away from the collision norma
 
 Balls do not get faster as captured percentage increases. Difficulty increases should come from level data, such as initial ball speed or ball count, not dynamic capture progress.
 
-## Path Hit Detection
+## Path Hit Detection And Burning Spread
 
 Each frame:
 
-1. Convert each ball position to grid cell.
-2. Check that cell's state.
-3. If the state is `TemporaryPath`, trigger player death.
-4. Bounce the ball away from the temporary path.
+1. Probe the ball's next movement against blocked grid states.
+2. If the probe touches `TemporaryPath`, notify `TerritoryManager`.
+3. `TerritoryManager` ignites the related path cell as `BurningPath`.
+4. The ball bounces away from the path.
+5. A timed spread coroutine expands burning path indices in both directions.
+6. If burning path reaches the player's current cell, trigger player death.
 
 This is more reliable than relying on Unity physics collisions.
 
@@ -242,7 +277,8 @@ claimed cells / total grid cells * 100
 Recommended:
 
 - Count the initial claimed border toward captured percentage.
-- Count captured unclaimed cells and completed temporary path cells after a path closes.
+- Count captured unclaimed cells and completed temporary path cells after an undamaged path closes.
+- Count surviving claimed path cells after a damaged path closes, but do not award flood-fill area capture for damaged paths.
 - Round the displayed percentage for the UI, even if the internal value remains a float.
 
 Example:

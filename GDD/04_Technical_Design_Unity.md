@@ -15,8 +15,8 @@ LevelScene
 ├── TerritoryManager
 ├── Player
 ├── Balls
-│   ├── Ball_01
-│   └── Ball_02
+│   ├── Ball_01 (runtime instance)
+│   ├── Ball_02 (runtime instance)
 │   └── ...
 ├── Main Camera (default for 3D Unity projects)
 ├── Directional Light (default for 3D Unity projects)
@@ -36,6 +36,8 @@ Responsibilities:
 - Handle game over
 - Handle level complete
 - Coordinate reset after death
+- Load level JSON files from `Assets/Resources/Levels`
+- Spawn or reuse balls from a shared ball prefab according to each level JSON
 
 Suggested fields:
 
@@ -43,6 +45,8 @@ Suggested fields:
 public int lives = 3;
 public bool isGameOver;
 public bool isLevelComplete;
+public BallController ballPrefab;
+public Transform ballsRoot;
 ```
 
 ### GridManager
@@ -80,6 +84,9 @@ Responsibilities:
 
 - Track whether the player is drawing
 - Store temporary path cells
+- Track burning path cells
+- Spread burning path danger along the active path
+- Resolve damaged path completion
 - Complete path
 - Run flood fill
 - Calculate captured percentage, including the initial claimed border and completed temporary path cells
@@ -89,6 +96,7 @@ Suggested fields:
 ```csharp
 public bool isDrawing;
 public List<Vector2Int> temporaryPathCells;
+public HashSet<int> burningPathIndices;
 public float capturedPercentage;
 ```
 
@@ -99,6 +107,7 @@ void HandlePlayerEnteredCell(Vector2Int cell);
 void StartDrawing(Vector2Int cell);
 void AddTemporaryPathCell(Vector2Int cell);
 void CompletePath();
+void HandleBallTouchedPath(Vector2Int touchedCell);
 void CancelTemporaryPath();
 float CalculateCapturedPercentage();
 ```
@@ -144,9 +153,10 @@ Responsibilities:
 
 - Move ball using scripted velocity
 - Bounce from blocked cells
-- Bounce from temporary path cells after triggering player death
+- Bounce from temporary path cells after notifying `TerritoryManager` to ignite the path
+- Use a forward wall/path probe distance to reduce visible overlap before bounce
 - Bounce from other balls
-- Notify GameManager if temporary path or player is hit
+- Notify GameManager if the vulnerable player is hit
 
 Suggested fields:
 
@@ -154,6 +164,7 @@ Suggested fields:
 public float speed = 4f;
 public Vector2 direction;
 public float hitRadius = 0.5f;
+public float wallProbeDistance = 0.45f;
 ```
 
 Important methods:
@@ -162,30 +173,31 @@ Important methods:
 void MoveBall();
 void CheckBounce();
 void CheckBallCollision(BallController otherBall);
-void CheckTemporaryPathHit();
+void NotifyPathHit(Vector2Int pathCell);
 void CheckPlayerHit();
 ```
 
 ### LevelData
 
-A ScriptableObject is recommended for level settings.
+Levels are stored as JSON files under `Assets/Resources/Levels`.
 
 Suggested fields:
 
 ```csharp
-[CreateAssetMenu(menuName = "Xonix/Level Data")]
-public class LevelData : ScriptableObject
+public class LevelData
 {
     public int width;
     public int height;
+    public float cellSize;
     public float requiredCapturePercentage;
-    public Vector2Int playerSpawnCell;
-    public List<Vector2Int> ballSpawnCells;
-    public List<Vector2> ballInitialDirections;
-    public float ballSpeed;
-    public bool scaleBallSpeedWithCapturedPercentage = false;
+    public LevelCell playerSpawnCell;
+    public LevelClaimedArea[] initiallyClaimedAreas;
+    public LevelCell[] initiallyClaimedCells;
+    public LevelBallData[] balls;
 }
 ```
+
+Shared ball visuals and default behavior should live in a `Ball` prefab. Level JSON controls each runtime ball's spawn cell, direction, speed, hit radius, player hit radius, and ground offset.
 
 ## Grid Cell State Enum
 
@@ -194,7 +206,8 @@ public enum CellState
 {
     Unclaimed,
     Claimed,
-    TemporaryPath
+    TemporaryPath,
+    BurningPath
 }
 ```
 
@@ -206,6 +219,7 @@ Example:
 
 ```text
 PlayerController -> TerritoryManager
+BallController -> TerritoryManager
 BallController -> GameManager
 BallController -> GridManager
 TerritoryManager -> GridManager
@@ -243,6 +257,7 @@ Generate clean procedural meshes for territory regions.
 | Claimed territory | Green |
 | Unclaimed territory | Gray |
 | Temporary path | Orange |
+| Burning path | Red |
 | Player | Blue |
 | Balls | Distinct colors |
 | Arena wall | Dark teal |
@@ -254,7 +269,7 @@ Do not rely on Unity physics for core gameplay logic.
 Use grid and distance checks instead:
 
 - Ball vs wall: grid state check
-- Ball vs temporary path: grid state check
+- Ball vs temporary path: grid probe plus `TerritoryManager.HandleBallTouchedPath`
 - Ball vs player: distance check
 - Ball vs ball: distance check and scripted direction reflection
 

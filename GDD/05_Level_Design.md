@@ -62,6 +62,8 @@ The player should respawn here after death.
 
 Level 1 contains two balls.
 
+Runtime balls should be spawned or configured from a shared `Ball` prefab. The level JSON defines how many balls exist and their per-level spawn, direction, speed, hit radius, player hit radius, and ground offset.
+
 Suggested positions:
 
 ```text
@@ -82,7 +84,7 @@ Possible future additions:
 
 ### More Balls
 
-Increase ball count to make area capture more difficult.
+Increase the number of ball entries in the level JSON to make area capture more difficult.
 
 ### Faster Balls
 

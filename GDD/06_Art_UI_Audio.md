@@ -8,13 +8,14 @@ The visual style can later move toward a simple 3D arcade look inspired by AirXo
 
 ## Ground Visuals
 
-The ground has three visual states:
+The ground/path system has four visual states:
 
 | Territory | Visual |
 |---|---|
 | Claimed | Smooth green area |
 | Unclaimed | Smooth gray area |
 | Temporary path | Visible square tiles |
+| Burning path | Red square tiles spreading along active path |
 
 ## Development Visual Strategy
 
@@ -37,12 +38,14 @@ Suggested approach:
 - Claimed area mesh
 - Unclaimed area mesh
 - Temporary path tiles remain separate and visible
+- Burning path tiles reuse the path tile system with red coloring
 
 ### Polish Stage
 
 Add:
 
 - Glow effect on temporary path
+- Hot glow or pulse effect on burning path
 - Smooth capture animation
 - Ball trail effects
 - Small explosion when player dies

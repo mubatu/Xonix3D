@@ -13,6 +13,7 @@ Create a playable Unity prototype of a 3D Xonix-style game with:
 - A player moving smoothly in four directions while snapping to grid lines
 - Two scripted bouncing balls
 - Temporary path drawing
+- Burning path danger when balls hit an active path
 - Area capture using grid/flood-fill logic
 - Lives and respawn system
 - Level completion based on captured percentage
@@ -31,12 +32,14 @@ Initial target:
 1. Player starts on claimed safe territory.
 2. Player enters unclaimed territory and begins drawing a temporary path.
 3. Balls continue moving inside unclaimed territory.
-4. If a ball touches the temporary path, the player loses one life and the ball bounces away.
-5. If a ball touches the player while the player is vulnerable, the player loses one life.
-6. If the player returns to claimed territory, the temporary path closes.
-7. The game calculates which region can be captured.
-8. Captured territory becomes safe territory.
-9. When the required capture percentage is reached, the level is completed.
+4. If a ball touches the temporary path, the hit tile becomes a red burning path tile and the red danger spreads along the path in both directions.
+5. If the red danger reaches the player before the player returns to claimed territory, the player loses one life.
+6. If a ball touches the player while the player is vulnerable, the player loses one life.
+7. If the player returns to claimed territory, the temporary path closes.
+8. If the path was not damaged by red danger, the game calculates which region can be captured.
+9. Captured territory becomes safe territory.
+10. If the path was damaged, red tiles break back to unclaimed territory and the surviving orange path tiles become claimed wall.
+11. When the required capture percentage is reached, the level is completed.
 
 ## Design Pillars
 
@@ -48,7 +51,7 @@ Movement should feel smooth, while the gameplay logic remains snapped to grid li
 
 ### 2. Clear Risk and Reward
 
-Leaving safe territory is risky because the temporary path can be hit by balls. Capturing larger areas gives faster progress but increases danger.
+Leaving safe territory is risky because balls can ignite the temporary path. Capturing larger areas gives faster progress, but a longer path gives red danger more time and distance to chase the player.
 
 ### 3. Grid-Based Gameplay, 3D Presentation
 
