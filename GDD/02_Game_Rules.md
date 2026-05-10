@@ -6,7 +6,7 @@ The arena contains four main territory states.
 
 | State | Name | Meaning |
 |---|---|---|
-| `Claimed` | Safe territory | Player can move safely here. Balls cannot enter this area for now. |
+| `Claimed` | Safe territory | Player can move safely here. Normal balls cannot enter this area. EaterBalls damage it on contact. |
 | `Unclaimed` | Dangerous territory | Balls move here. Player can enter this area to draw a path. |
 | `TemporaryPath` | Drawing path | Created when the player moves through unclaimed territory. If hit by a ball, it becomes burning path instead of killing instantly. |
 | `BurningPath` | Red danger path | A ball-hit path tile. It spreads along the active path and kills the player if it reaches them. |
@@ -38,10 +38,11 @@ public enum CellState
 - While drawing, the player may change direction only with a perpendicular input.
 - While drawing, same-direction and opposite-direction inputs are ignored.
 - If the active path is burning, the player must reach claimed territory before the red danger reaches their current cell.
+- If the player is drawing and reaches the outer arena boundary outside the grid, the path is completed as if the player reached claimed territory. The player does not move outside the arena.
 
 ## Ball Rules
 
-- Balls move only inside unclaimed territory.
+- Normal ball movement is contained by unclaimed territory. EaterBalls also move in unclaimed territory, but can damage claimed cells on contact before bouncing away.
 - Balls use scripted movement, not Rigidbody physics.
 - Balls bounce when they hit claimed territory, arena boundaries, temporary path cells, or burning path cells.
 - If a ball hits a temporary path, it ignites that path cell as `BurningPath` and bounces away.
@@ -50,7 +51,20 @@ public enum CellState
 - Balls should keep a constant speed unless level design says otherwise.
 - Ball speed does not increase based on captured percentage.
 - Level 1 contains two balls.
-- Note that new ball types can be added later.
+
+### Normal Balls
+
+- Normal balls move only inside `Unclaimed` territory.
+- Normal balls bounce away from `Claimed`, `TemporaryPath`, `BurningPath`, and arena boundary contacts.
+- Normal balls cannot damage claimed territory.
+
+### EaterBalls
+
+- EaterBalls are special balls configured by level data.
+- EaterBalls use the same movement, player-hit, path-hit, and ball-collision rules as normal balls.
+- When an EaterBall touches `Claimed` territory, it destroys up to two contacted claimed cells, converting them back to `Unclaimed`.
+- After eating claimed cells, the EaterBall bounces away from the contact instead of passing through.
+- EaterBalls still bounce from temporary path, burning path, arena boundary, and other balls.
 
 ## Death Rules
 
@@ -80,7 +94,7 @@ A path is completed when:
 
 - The player started from claimed territory,
 - moved through unclaimed territory while drawing temporary path,
-- and returned to claimed territory.
+- and returned to claimed territory or reached the outer arena boundary.
 
 When this happens:
 

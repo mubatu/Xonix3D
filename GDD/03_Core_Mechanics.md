@@ -105,7 +105,8 @@ Unclaimed -> TemporaryPath
 The path remains active until:
 
 1. The player returns to claimed territory, or
-2. The player dies.
+2. The player reaches the outer arena boundary while drawing, or
+3. The player dies.
 
 ## Burning Path Danger
 
@@ -134,6 +135,8 @@ The player should not be allowed to:
 - Move diagonally.
 - Cross their own temporary path.
 - Reverse direction while drawing a temporary path.
+
+If the player is drawing and attempts to move beyond the grid into the outer arena boundary, the player remains inside the arena and the current path completes.
 
 ## Capture Algorithm
 
@@ -237,6 +240,20 @@ If colliding with another ball, reflect both balls away from the collision norma
 
 Balls do not get faster as captured percentage increases. Difficulty increases should come from level data, such as initial ball speed or ball count, not dynamic capture progress.
 
+## EaterBall Claimed-Territory Damage
+
+EaterBalls are a special ball type configured in level JSON.
+
+When an EaterBall probes a `Claimed` cell:
+
+1. The contacted claimed cell is marked for destruction.
+2. One additional claimed cell in the bite direction is also marked when available.
+3. Up to two claimed cells are converted back to `Unclaimed`.
+4. Captured percentage is recalculated.
+5. The contact still counts as blocked, so the EaterBall bounces away.
+
+EaterBalls do not eat temporary path or burning path cells. Those contacts follow the normal path-hit and bounce rules.
+
 ## Path Hit Detection And Burning Spread
 
 Each frame:
@@ -244,9 +261,10 @@ Each frame:
 1. Probe the ball's next movement against blocked grid states.
 2. If the probe touches `TemporaryPath`, notify `TerritoryManager`.
 3. `TerritoryManager` ignites the related path cell as `BurningPath`.
-4. The ball bounces away from the path.
-5. A timed spread coroutine expands burning path indices in both directions.
-6. If burning path reaches the player's current cell, trigger player death.
+4. If the probe is from an EaterBall against claimed territory, destroy up to two claimed cells and recalculate captured percentage.
+5. The ball bounces away from the path or claimed-territory contact.
+6. A timed spread coroutine expands burning path indices in both directions.
+7. If burning path reaches the player's current cell, trigger player death.
 
 This is more reliable than relying on Unity physics collisions.
 

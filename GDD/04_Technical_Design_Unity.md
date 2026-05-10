@@ -154,6 +154,8 @@ Responsibilities:
 - Move ball using scripted velocity
 - Bounce from blocked cells
 - Bounce from temporary path cells after notifying `TerritoryManager` to ignite the path
+- Support normal ball and EaterBall behavior
+- For EaterBalls, destroy up to two claimed cells on contact and then bounce away
 - Use a forward wall/path probe distance to reduce visible overlap before bounce
 - Bounce from other balls
 - Notify GameManager if the vulnerable player is hit
@@ -165,6 +167,9 @@ public float speed = 4f;
 public Vector2 direction;
 public float hitRadius = 0.5f;
 public float wallProbeDistance = 0.45f;
+public BallType ballType;
+public Material normalBallMaterial;
+public Material eaterBallMaterial;
 ```
 
 Important methods:
@@ -174,6 +179,7 @@ void MoveBall();
 void CheckBounce();
 void CheckBallCollision(BallController otherBall);
 void NotifyPathHit(Vector2Int pathCell);
+void DestroyClaimedContacts();
 void CheckPlayerHit();
 ```
 
@@ -186,6 +192,7 @@ Suggested fields:
 ```csharp
 public class LevelData
 {
+    public int levelNumber;
     public int width;
     public int height;
     public float cellSize;
@@ -197,7 +204,15 @@ public class LevelData
 }
 ```
 
-Shared ball visuals and default behavior should live in a `Ball` prefab. Level JSON controls each runtime ball's spawn cell, direction, speed, hit radius, player hit radius, and ground offset.
+Each `LevelBallData` entry also supports:
+
+```csharp
+public string ballType; // "Normal" or "Eater"
+```
+
+Shared ball visuals and default behavior should live in a `Ball` prefab. Level JSON controls each runtime ball's type, spawn cell, direction, speed, hit radius, player hit radius, and ground offset.
+
+`BallController` should default missing or unknown `ballType` values to `Normal` so older level JSON files remain valid.
 
 ## Grid Cell State Enum
 
@@ -258,6 +273,8 @@ Generate clean procedural meshes for territory regions.
 | Unclaimed territory | Gray |
 | Temporary path | Orange |
 | Burning path | Red |
+| Normal ball | `BallMaterial` |
+| EaterBall | `EaterBallMaterial` |
 | Player | Blue |
 | Balls | Distinct colors |
 | Arena wall | Dark teal |

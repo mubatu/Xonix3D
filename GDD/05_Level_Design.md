@@ -62,7 +62,7 @@ The player should respawn here after death.
 
 Level 1 contains two balls.
 
-Runtime balls should be spawned or configured from a shared `Ball` prefab. The level JSON defines how many balls exist and their per-level spawn, direction, speed, hit radius, player hit radius, and ground offset.
+Runtime balls should be spawned or configured from a shared `Ball` prefab. The level JSON defines how many balls exist and their per-level type, spawn, direction, speed, hit radius, player hit radius, and ground offset.
 
 Suggested positions:
 
@@ -77,6 +77,38 @@ Example:
 Ball 1 spawn: (width * 0.30, height * 0.60)
 Ball 2 spawn: (width * 0.70, height * 0.70)
 ```
+
+## Level 2 Overview
+
+Level 2 keeps the rectangular arena but adds a claimed block in the center.
+
+It contains:
+
+- Claimed outer border
+- Claimed center block
+- Three normal balls
+- Player starting at the bottom border
+- Level completion by capture percentage
+
+## Level 3 Overview
+
+Level 3 introduces EaterBalls.
+
+It contains:
+
+- Claimed outer border
+- Claimed center block
+- Three EaterBalls
+- Player starting at the bottom border
+- Level completion by capture percentage
+
+EaterBalls should be configured with:
+
+```json
+"ballType": "Eater"
+```
+
+Level 3 tests the player's ability to keep claiming territory while EaterBalls break claimed cells back into unclaimed territory. Each EaterBall contact with claimed territory destroys up to two claimed cells and then bounces away.
 
 ## Future Level Ideas
 
@@ -93,6 +125,10 @@ Increase speed per level if needed. Ball speed should not increase dynamically a
 ### Enemies in Claimed Territory
 
 Later, special enemies can move inside claimed territory so the player is not fully safe.
+
+### More Ball Types
+
+Add additional `ballType` values in level JSON when a new ball uses the same prefab but different gameplay rules.
 
 ### Obstacles
 

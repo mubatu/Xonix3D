@@ -66,13 +66,15 @@ The player should visually feel like it moves above the ground, not like a rolli
 Prototype:
 
 - Sphere mesh with colored material
+- Normal balls use `BallMaterial`
+- EaterBalls use `EaterBallMaterial`
 
 Later:
 
 - Rolling animation
 - Trail effect
 - Reflection or shine
-- Distinct colors for different ball types
+- Additional distinct materials for future ball types
 
 ## Camera
 
