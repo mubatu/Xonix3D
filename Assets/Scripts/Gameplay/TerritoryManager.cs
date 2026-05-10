@@ -1,9 +1,13 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Profiling;
 using UnityEngine;
 
 public sealed class TerritoryManager : MonoBehaviour
 {
+    private static readonly ProfilerMarker AddTemporaryPathCellMarker = new("Xonix.PathTiles.AddTemporaryPathCell");
+    private static readonly ProfilerMarker CancelTemporaryPathMarker = new("Xonix.PathTiles.CancelTemporaryPath");
+
     private static readonly Vector2Int[] FloodFillDirections =
     {
         Vector2Int.up,
@@ -93,21 +97,24 @@ public sealed class TerritoryManager : MonoBehaviour
 
     public void CancelTemporaryPath()
     {
-        StopPathBurn();
-
-        foreach (Vector2Int pathCell in temporaryPathCells)
+        using (CancelTemporaryPathMarker.Auto())
         {
-            CellState cellState = gridManager.GetCellState(pathCell);
-            if (cellState == CellState.TemporaryPath || cellState == CellState.BurningPath)
-            {
-                gridManager.SetCellState(pathCell, CellState.Unclaimed);
-            }
-        }
+            StopPathBurn();
 
-        temporaryPathCells.Clear();
-        isDrawing = false;
-        capturedPercentage = CalculateCapturedPercentage();
-        gameManager?.HandleCaptureUpdated(capturedPercentage);
+            foreach (Vector2Int pathCell in temporaryPathCells)
+            {
+                CellState cellState = gridManager.GetCellState(pathCell);
+                if (cellState == CellState.TemporaryPath || cellState == CellState.BurningPath)
+                {
+                    gridManager.SetCellState(pathCell, CellState.Unclaimed);
+                }
+            }
+
+            temporaryPathCells.Clear();
+            isDrawing = false;
+            capturedPercentage = CalculateCapturedPercentage();
+            gameManager?.HandleCaptureUpdated(capturedPercentage);
+        }
     }
 
     public void ResetTerritory()
@@ -166,13 +173,16 @@ public sealed class TerritoryManager : MonoBehaviour
 
     private void AddTemporaryPathCell(Vector2Int cell)
     {
-        if (temporaryPathCells.Contains(cell))
+        using (AddTemporaryPathCellMarker.Auto())
         {
-            return;
-        }
+            if (temporaryPathCells.Contains(cell))
+            {
+                return;
+            }
 
-        temporaryPathCells.Add(cell);
-        gridManager.SetCellState(cell, CellState.TemporaryPath);
+            temporaryPathCells.Add(cell);
+            gridManager.SetCellState(cell, CellState.TemporaryPath);
+        }
     }
 
     private void CompletePath()

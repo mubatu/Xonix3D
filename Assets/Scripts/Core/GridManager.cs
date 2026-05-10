@@ -1,9 +1,22 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
+using Unity.Profiling;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 public sealed class GridManager : MonoBehaviour
 {
+    private static readonly ProfilerMarker SetCellStateMarker = new("Xonix.Grid.SetCellState");
+    private static readonly ProfilerMarker RefreshCellVisualMarker = new("Xonix.PathTiles.RefreshCellVisual");
+    private static readonly ProfilerMarker PathTileShowMarker = new("Xonix.PathTiles.ShowOrReuse");
+    private static readonly ProfilerMarker PathTileReuseMarker = new("Xonix.PathTiles.ReuseRenderer");
+    private static readonly ProfilerMarker PathTileHideMarker = new("Xonix.PathTiles.Hide");
+    private static readonly ProfilerMarker CreatePathTileRendererMarker = new("Xonix.PathTiles.CreateRenderer");
+    private static readonly ProfilerMarker ConfigurePathTileTransformMarker = new("Xonix.PathTiles.ConfigureTransform");
+    private static readonly ProfilerMarker ResetPathTilePoolForProfilingMarker = new("Xonix.PathTiles.ResetPoolForProfiling");
+
     [Header("Grid")]
     [SerializeField] private int width = 40;
     [SerializeField] private int height = 40;
@@ -30,6 +43,11 @@ public sealed class GridManager : MonoBehaviour
     [SerializeField] private float capturePulseDuration = 0.45f;
     [SerializeField] private int capturePulseCount = 2;
 
+    [Header("Profiling Debug")]
+    [SerializeField] private bool enableProfilingHotkeys = true;
+    [SerializeField] private KeyCode resetPathTilePoolKey = KeyCode.F9;
+    [SerializeField] private KeyCode logPathTileProfileKey = KeyCode.F10;
+
     private CellState[,] grid;
     private Renderer[,] pathTileRenderers;
     private Renderer[] wallRenderers;
@@ -46,6 +64,11 @@ public sealed class GridManager : MonoBehaviour
     private bool pathTilePoolCreated;
     private bool wallsCreated;
     private bool groundMeshesDirty;
+    private int pathTileProfileSamples;
+    private int pathTileProfileCreates;
+    private int pathTileProfileReuses;
+    private long pathTileProfileTicks;
+    private long pathTileProfileAllocatedBytes;
 
     public int Width => width;
     public int Height => height;
@@ -65,6 +88,19 @@ public sealed class GridManager : MonoBehaviour
 
         RebuildGroundMeshes();
         groundMeshesDirty = false;
+    }
+
+    private void Update()
+    {
+        if (enableProfilingHotkeys && Input.GetKeyDown(resetPathTilePoolKey))
+        {
+            ResetPathTilePoolForProfiling();
+        }
+
+        if (enableProfilingHotkeys && Input.GetKeyDown(logPathTileProfileKey))
+        {
+            LogAndResetPathTileProfileSamples();
+        }
     }
 
     public Vector2Int WorldToGrid(Vector3 worldPosition)
@@ -105,15 +141,18 @@ public sealed class GridManager : MonoBehaviour
 
     public void SetCellState(Vector2Int cell, CellState state)
     {
-        InitializeIfNeeded();
-
-        if (!IsInsideGrid(cell))
+        using (SetCellStateMarker.Auto())
         {
-            return;
-        }
+            InitializeIfNeeded();
 
-        grid[cell.x, cell.y] = state;
-        RefreshCellVisual(cell);
+            if (!IsInsideGrid(cell))
+            {
+                return;
+            }
+
+            grid[cell.x, cell.y] = state;
+            RefreshCellVisual(cell);
+        }
     }
 
     public bool IsBlockedForBall(Vector2Int cell)
@@ -176,6 +215,43 @@ public sealed class GridManager : MonoBehaviour
         }
 
         StartCoroutine(PlayCapturePulseRoutine(cells));
+    }
+
+    public void ResetPathTilePoolForProfiling()
+    {
+        if (!isInitialized)
+        {
+            return;
+        }
+
+        ResetPathTileProfileSamples();
+        StartCoroutine(ResetPathTilePoolForProfilingRoutine());
+    }
+
+    public void ResetPathTileProfileSamples()
+    {
+        pathTileProfileSamples = 0;
+        pathTileProfileCreates = 0;
+        pathTileProfileReuses = 0;
+        pathTileProfileTicks = 0;
+        pathTileProfileAllocatedBytes = 0;
+    }
+
+    public void LogAndResetPathTileProfileSamples()
+    {
+        double cpuMs = pathTileProfileTicks * 1000.0 / Stopwatch.Frequency;
+        double gcKb = pathTileProfileAllocatedBytes / 1024.0;
+
+        Debug.Log(
+            "Xonix path tile profile: "
+            + $"samples={pathTileProfileSamples}, "
+            + $"created={pathTileProfileCreates}, "
+            + $"reused={pathTileProfileReuses}, "
+            + $"cpuMs={cpuMs:F4}, "
+            + $"gcKB={gcKb:F3}"
+        );
+
+        ResetPathTileProfileSamples();
     }
 
     private void InitializeIfNeeded()
@@ -335,6 +411,24 @@ public sealed class GridManager : MonoBehaviour
         pathTilePoolCreated = true;
     }
 
+    private IEnumerator ResetPathTilePoolForProfilingRoutine()
+    {
+        using (ResetPathTilePoolForProfilingMarker.Auto())
+        {
+            DestroyChildren(tileRoot);
+            pathTileRenderers = new Renderer[width, height];
+            pathTilePoolCreated = true;
+        }
+
+        yield return null;
+
+        yield return Resources.UnloadUnusedAssets();
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+
+        Debug.Log("Xonix profiling: temporary path tile pool reset. The next path draw is a cold pool run.");
+    }
+
     private MeshFilter CreateMeshVisual(string objectName, Transform parent, Material material, Color color, out Renderer meshRenderer)
     {
         GameObject meshObject = new GameObject(objectName, typeof(MeshFilter), typeof(MeshRenderer));
@@ -429,60 +523,103 @@ public sealed class GridManager : MonoBehaviour
 
     private void RefreshCellVisual(Vector2Int cell)
     {
-        if (!IsInsideGrid(cell) || pathTileRenderers == null)
+        using (RefreshCellVisualMarker.Auto())
         {
-            return;
-        }
+            if (!IsInsideGrid(cell) || pathTileRenderers == null)
+            {
+                return;
+            }
 
-        CellState state = grid[cell.x, cell.y];
-        Renderer pathTileRenderer = pathTileRenderers[cell.x, cell.y];
+            CellState state = grid[cell.x, cell.y];
+            Renderer pathTileRenderer = pathTileRenderers[cell.x, cell.y];
 
-        if (state == CellState.TemporaryPath || state == CellState.BurningPath)
-        {
-            pathTileRenderer ??= CreatePathTileRenderer(cell);
-            ConfigurePathTileTransform(cell);
-            ApplyRendererMaterialAndColor(pathTileRenderer, temporaryPathMaterial, GetColorForState(state));
-            pathTileRenderer.gameObject.SetActive(true);
-        }
-        else if (pathTileRenderer != null)
-        {
-            pathTileRenderer.gameObject.SetActive(false);
-        }
+            if (state == CellState.TemporaryPath || state == CellState.BurningPath)
+            {
+                using (PathTileShowMarker.Auto())
+                {
+                    long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+                    long ticksBefore = Stopwatch.GetTimestamp();
+                    bool createdTile = false;
 
-        groundMeshesDirty = true;
+                    if (pathTileRenderer == null)
+                    {
+                        pathTileRenderer = CreatePathTileRenderer(cell);
+                        createdTile = true;
+                    }
+                    else
+                    {
+                        using (PathTileReuseMarker.Auto())
+                        {
+                        }
+                    }
+
+                    ConfigurePathTileTransform(cell);
+                    ApplyRendererMaterialAndColor(pathTileRenderer, temporaryPathMaterial, GetColorForState(state));
+                    pathTileRenderer.gameObject.SetActive(true);
+
+                    pathTileProfileSamples++;
+                    pathTileProfileTicks += Stopwatch.GetTimestamp() - ticksBefore;
+                    pathTileProfileAllocatedBytes += Math.Max(0L, GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
+
+                    if (createdTile)
+                    {
+                        pathTileProfileCreates++;
+                    }
+                    else
+                    {
+                        pathTileProfileReuses++;
+                    }
+                }
+            }
+            else if (pathTileRenderer != null)
+            {
+                using (PathTileHideMarker.Auto())
+                {
+                    pathTileRenderer.gameObject.SetActive(false);
+                }
+            }
+
+            groundMeshesDirty = true;
+        }
     }
 
     private Renderer CreatePathTileRenderer(Vector2Int cell)
     {
-        GameObject tile = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        tile.name = $"TemporaryPathTile_{cell.x}_{cell.y}";
-        tile.transform.SetParent(tileRoot);
-
-        Collider tileCollider = tile.GetComponent<Collider>();
-        if (tileCollider != null)
+        using (CreatePathTileRendererMarker.Auto())
         {
-            Destroy(tileCollider);
-        }
+            GameObject tile = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            tile.name = $"TemporaryPathTile_{cell.x}_{cell.y}";
+            tile.transform.SetParent(tileRoot);
 
-        Renderer pathTileRenderer = tile.GetComponent<Renderer>();
-        pathTileRenderers[cell.x, cell.y] = pathTileRenderer;
-        return pathTileRenderer;
+            Collider tileCollider = tile.GetComponent<Collider>();
+            if (tileCollider != null)
+            {
+                Destroy(tileCollider);
+            }
+
+            Renderer pathTileRenderer = tile.GetComponent<Renderer>();
+            pathTileRenderers[cell.x, cell.y] = pathTileRenderer;
+            return pathTileRenderer;
+        }
     }
 
     private void ConfigurePathTileTransform(Vector2Int cell)
     {
-        if (pathTileRenderers == null || pathTileRenderers[cell.x, cell.y] == null)
+        using (ConfigurePathTileTransformMarker.Auto())
         {
-            return;
+            if (pathTileRenderers == null || pathTileRenderers[cell.x, cell.y] == null)
+            {
+                return;
+            }
+
+            float stateHeight = wallHeight;
+            float tileSize = Mathf.Max(0.05f, cellSize - tileGap);
+
+            Transform tileTransform = pathTileRenderers[cell.x, cell.y].transform;
+            Vector3 groundPosition = GridToWorld(cell);
+            tileTransform.position = new Vector3(groundPosition.x, stateHeight * 0.5f, groundPosition.z);
+            tileTransform.localScale = new Vector3(tileSize, stateHeight, tileSize);
         }
-
-        float stateHeight = wallHeight;
-        float tileSize = Mathf.Max(0.05f, cellSize - tileGap);
-
-        Transform tileTransform = pathTileRenderers[cell.x, cell.y].transform;
-        Vector3 groundPosition = GridToWorld(cell);
-        tileTransform.position = new Vector3(groundPosition.x, stateHeight * 0.5f, groundPosition.z);
-        tileTransform.localScale = new Vector3(tileSize, stateHeight, tileSize);
     }
 
     private float GetHeightForState(CellState state)

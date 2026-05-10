@@ -24,6 +24,10 @@ public sealed class GameManager : MonoBehaviour
     [SerializeField] private int deathFlashCount = 4;
     [SerializeField] private float deathPopScale = 1.35f;
 
+    [Header("Debug Shortcuts")]
+    [SerializeField] private bool enableDebugShortcuts = true;
+    [SerializeField] private KeyCode reloadLevelFromJsonKey = KeyCode.F8;
+
     private int lives;
     private bool hasStarted;
     private bool isGameOver;
@@ -75,6 +79,12 @@ public sealed class GameManager : MonoBehaviour
 
     private void Update()
     {
+        if (enableDebugShortcuts && Input.GetKeyDown(reloadLevelFromJsonKey))
+        {
+            ReloadCurrentLevelFromJson();
+            return;
+        }
+
         if (IsMainMenuActive && Input.GetKeyDown(KeyCode.Return))
         {
             StartGame();
@@ -290,6 +300,14 @@ public sealed class GameManager : MonoBehaviour
         currentLevelIndex = 0;
         ApplyCurrentLevelData();
         RestartLevel();
+    }
+
+    public void ReloadCurrentLevelFromJson()
+    {
+        LoadLevelFiles();
+        ApplyCurrentLevelData();
+        RestartLevel(true);
+        Debug.Log($"Reloaded Level {levelNumber} from JSON.");
     }
 
     public void HandlePlayerDeath()
