@@ -129,6 +129,9 @@ MonoBehaviour:
   hitRadius: 0.9
   playerHitRadius: 0.45
   wallProbeDistance: 1
+  ballType: 0
+  normalBallMaterial: {fileID: 2100000, guid: 29788143ee12648c7a6784df5e221fad, type: 2}
+  eaterBallMaterial: {fileID: 2100000, guid: cfa4b3f7b738247f48576a4d05f89618, type: 2}
   overrideBallColor: 0
   ballColor: {r: 0.92, g: 0.18, b: 0.18, a: 1}
   createTrail: 1

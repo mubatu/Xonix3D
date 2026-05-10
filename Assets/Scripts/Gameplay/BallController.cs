@@ -1,9 +1,16 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+public enum BallType
+{
+    Normal,
+    Eater
+}
+
 public sealed class BallController : MonoBehaviour
 {
     private static readonly List<BallController> ActiveBalls = new();
+    private const int EaterDestroyedCellCount = 2;
 
     [Header("References")]
     [SerializeField] private GridManager gridManager;
@@ -21,8 +28,11 @@ public sealed class BallController : MonoBehaviour
     [SerializeField] private float hitRadius = 0.45f;
     [SerializeField] private float playerHitRadius = 0.45f;
     [SerializeField] private float wallProbeDistance = 0.45f;
+    [SerializeField] private BallType ballType = BallType.Normal;
 
     [Header("Visuals")]
+    [SerializeField] private Material normalBallMaterial;
+    [SerializeField] private Material eaterBallMaterial;
     [SerializeField] private bool overrideBallColor;
     [SerializeField] private Color ballColor = new Color(0.92f, 0.18f, 0.18f);
     [SerializeField] private bool createTrail = true;
@@ -39,19 +49,23 @@ public sealed class BallController : MonoBehaviour
     public Vector2 Direction => direction;
     public float HitRadius => hitRadius;
     public Vector2Int CurrentCell => gridManager != null ? gridManager.WorldToGrid(transform.position) : spawnCell;
+    public BallType BallType => ballType;
+    public bool IsEater => ballType == BallType.Eater;
 
     private readonly struct ProbeCollisionInfo
     {
-        public ProbeCollisionInfo(bool isBlocked, bool touchedPath, Vector2Int pathCell)
+        public ProbeCollisionInfo(bool isBlocked, bool touchedPath, Vector2Int pathCell, List<Vector2Int> claimedContacts)
         {
             IsBlocked = isBlocked;
             TouchedPath = touchedPath;
             PathCell = pathCell;
+            ClaimedContacts = claimedContacts;
         }
 
         public bool IsBlocked { get; }
         public bool TouchedPath { get; }
         public Vector2Int PathCell { get; }
+        public List<Vector2Int> ClaimedContacts { get; }
     }
 
     private void Awake()
@@ -77,10 +91,11 @@ public sealed class BallController : MonoBehaviour
         }
 
         ballRenderer = GetComponentInChildren<Renderer>();
+        normalBallMaterial ??= ballRenderer != null ? ballRenderer.sharedMaterial : null;
         propertyBlock = new MaterialPropertyBlock();
         NormalizeDirection();
         initialDirection = direction;
-        ApplyColor();
+        ApplyVisualStyle();
         EnsureTrail();
     }
 
@@ -144,6 +159,7 @@ public sealed class BallController : MonoBehaviour
             direction = ballData.direction.ToVector2();
         }
 
+        ballType = ParseBallType(ballData.ballType);
         speed = Mathf.Max(0.1f, ballData.speed);
         hitRadius = Mathf.Max(0.01f, ballData.hitRadius);
         playerHitRadius = Mathf.Max(0.01f, ballData.playerHitRadius);
@@ -156,6 +172,7 @@ public sealed class BallController : MonoBehaviour
             transform.position = GetBallWorldPosition(spawnCell);
         }
 
+        ApplyVisualStyle();
         trailRenderer?.Clear();
     }
 
@@ -196,6 +213,7 @@ public sealed class BallController : MonoBehaviour
         {
             territoryManager?.HandleBallTouchedPath(currentCollision.PathCell);
         }
+        DestroyClaimedContacts(currentCollision);
 
         Vector3 nextPosition = currentPosition + movement;
         ProbeCollisionInfo nextCollision = GetProbeCollisionAt(nextPosition);
@@ -220,6 +238,7 @@ public sealed class BallController : MonoBehaviour
         }
 
         ReflectFromCollision(currentPosition, movement);
+        DestroyClaimedContacts(nextCollision);
     }
 
     private void ReflectFromCollision(Vector3 currentPosition, Vector3 movement)
@@ -332,22 +351,23 @@ public sealed class BallController : MonoBehaviour
         bool isBlocked = false;
         bool touchedPath = false;
         Vector2Int pathCell = Vector2Int.zero;
+        List<Vector2Int> claimedContacts = null;
         float probeDistance = GetWallProbeDistance();
 
         if (checkX && Mathf.Abs(direction.x) > 0.0001f)
         {
             Vector2Int xCell = GetCellAt(worldPosition + new Vector3(Mathf.Sign(direction.x) * probeDistance, 0f, 0f));
             CellState xState = gridManager.GetCellState(xCell);
-            isBlocked |= xState != CellState.Unclaimed;
-            CapturePathContact(xState, xCell, ref touchedPath, ref pathCell);
+            Vector2Int biteDirection = new Vector2Int(GetDirectionSign(direction.x), 0);
+            CaptureProbeContact(xState, xCell, biteDirection, ref touchedPath, ref pathCell, ref claimedContacts, ref isBlocked);
         }
 
         if (checkZ && Mathf.Abs(direction.y) > 0.0001f)
         {
             Vector2Int zCell = GetCellAt(worldPosition + new Vector3(0f, 0f, Mathf.Sign(direction.y) * probeDistance));
             CellState zState = gridManager.GetCellState(zCell);
-            isBlocked |= zState != CellState.Unclaimed;
-            CapturePathContact(zState, zCell, ref touchedPath, ref pathCell);
+            Vector2Int biteDirection = new Vector2Int(0, GetDirectionSign(direction.y));
+            CaptureProbeContact(zState, zCell, biteDirection, ref touchedPath, ref pathCell, ref claimedContacts, ref isBlocked);
         }
 
         if (checkX && checkZ && Mathf.Abs(direction.x) > 0.0001f && Mathf.Abs(direction.y) > 0.0001f)
@@ -359,11 +379,11 @@ public sealed class BallController : MonoBehaviour
             );
             Vector2Int diagonalCell = GetCellAt(diagonalProbe);
             CellState diagonalState = gridManager.GetCellState(diagonalCell);
-            isBlocked |= diagonalState != CellState.Unclaimed;
-            CapturePathContact(diagonalState, diagonalCell, ref touchedPath, ref pathCell);
+            Vector2Int biteDirection = new Vector2Int(GetDirectionSign(direction.x), GetDirectionSign(direction.y));
+            CaptureProbeContact(diagonalState, diagonalCell, biteDirection, ref touchedPath, ref pathCell, ref claimedContacts, ref isBlocked);
         }
 
-        return new ProbeCollisionInfo(isBlocked, touchedPath, pathCell);
+        return new ProbeCollisionInfo(isBlocked, touchedPath, pathCell, claimedContacts);
     }
 
     private Vector2Int GetCellAt(Vector3 worldPosition)
@@ -371,19 +391,75 @@ public sealed class BallController : MonoBehaviour
         return gridManager.WorldToGrid(worldPosition);
     }
 
-    private static void CapturePathContact(CellState cellState, Vector2Int cell, ref bool touchedPath, ref Vector2Int pathCell)
+    private void CaptureProbeContact(
+        CellState cellState,
+        Vector2Int cell,
+        Vector2Int biteDirection,
+        ref bool touchedPath,
+        ref Vector2Int pathCell,
+        ref List<Vector2Int> claimedContacts,
+        ref bool isBlocked)
     {
-        if (cellState != CellState.TemporaryPath && cellState != CellState.BurningPath)
+        if (cellState == CellState.Unclaimed)
         {
             return;
         }
 
-        if (!touchedPath)
+        if (cellState == CellState.Claimed && IsEater && gridManager.IsInsideGrid(cell))
         {
-            pathCell = cell;
+            AddClaimedContact(cell, ref claimedContacts);
+            AddClaimedContact(cell + biteDirection, ref claimedContacts);
+            isBlocked = true;
+            return;
         }
 
-        touchedPath = true;
+        isBlocked = true;
+
+        if (cellState == CellState.TemporaryPath || cellState == CellState.BurningPath)
+        {
+            if (!touchedPath)
+            {
+                pathCell = cell;
+            }
+
+            touchedPath = true;
+        }
+    }
+
+    private void DestroyClaimedContacts(ProbeCollisionInfo collisionInfo)
+    {
+        if (!IsEater || collisionInfo.ClaimedContacts == null || collisionInfo.ClaimedContacts.Count == 0 || gridManager == null)
+        {
+            return;
+        }
+
+        List<Vector2Int> destroyedCells = new();
+        foreach (Vector2Int cell in collisionInfo.ClaimedContacts)
+        {
+            if (destroyedCells.Count >= EaterDestroyedCellCount)
+            {
+                break;
+            }
+
+            if (!gridManager.IsInsideGrid(cell) || gridManager.GetCellState(cell) != CellState.Claimed)
+            {
+                continue;
+            }
+
+            gridManager.SetCellState(cell, CellState.Unclaimed);
+            destroyedCells.Add(cell);
+        }
+
+        territoryManager?.HandleClaimedCellsDestroyed(destroyedCells);
+    }
+
+    private static void AddClaimedContact(Vector2Int cell, ref List<Vector2Int> claimedContacts)
+    {
+        claimedContacts ??= new List<Vector2Int>();
+        if (!claimedContacts.Contains(cell))
+        {
+            claimedContacts.Add(cell);
+        }
     }
 
     private float GetWallProbeDistance()
@@ -407,11 +483,17 @@ public sealed class BallController : MonoBehaviour
         direction.Normalize();
     }
 
-    private void ApplyColor()
+    private void ApplyVisualStyle()
     {
         if (ballRenderer == null)
         {
             return;
+        }
+
+        Material selectedMaterial = IsEater ? eaterBallMaterial : normalBallMaterial;
+        if (selectedMaterial != null)
+        {
+            ballRenderer.sharedMaterial = selectedMaterial;
         }
 
         if (!overrideBallColor)
@@ -424,6 +506,16 @@ public sealed class BallController : MonoBehaviour
         propertyBlock.SetColor("_Color", ballColor);
         propertyBlock.SetColor("_BaseColor", ballColor);
         ballRenderer.SetPropertyBlock(propertyBlock);
+    }
+
+    private static BallType ParseBallType(string typeName)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            return BallType.Normal;
+        }
+
+        return System.Enum.TryParse(typeName, true, out BallType parsedType) ? parsedType : BallType.Normal;
     }
 
     private void EnsureTrail()
@@ -484,5 +576,10 @@ public sealed class BallController : MonoBehaviour
     private static Vector2 GetXZ(Vector3 position)
     {
         return new Vector2(position.x, position.z);
+    }
+
+    private static int GetDirectionSign(float value)
+    {
+        return value >= 0f ? 1 : -1;
     }
 }

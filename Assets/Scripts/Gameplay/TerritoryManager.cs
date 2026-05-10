@@ -55,8 +55,18 @@ public sealed class TerritoryManager : MonoBehaviour
 
     public void HandlePlayerEnteredCell(Vector2Int cell)
     {
-        if (gridManager == null || !gridManager.IsInsideGrid(cell))
+        if (gridManager == null)
         {
+            return;
+        }
+
+        if (!gridManager.IsInsideGrid(cell))
+        {
+            if (isDrawing)
+            {
+                CompletePath();
+            }
+
             return;
         }
 
@@ -135,6 +145,17 @@ public sealed class TerritoryManager : MonoBehaviour
         {
             pathBurnRoutine = StartCoroutine(SpreadPathBurnRoutine());
         }
+    }
+
+    public void HandleClaimedCellsDestroyed(IReadOnlyList<Vector2Int> destroyedCells)
+    {
+        if (destroyedCells == null || destroyedCells.Count == 0)
+        {
+            return;
+        }
+
+        capturedPercentage = CalculateCapturedPercentage();
+        gameManager?.HandleCaptureUpdated(capturedPercentage);
     }
 
     private void StartDrawing(Vector2Int cell)

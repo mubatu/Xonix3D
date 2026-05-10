@@ -230,6 +230,7 @@ public sealed class PlayerController : MonoBehaviour
         Vector2Int nextCell = currentCell + direction;
         if (!gridManager.IsInsideGrid(nextCell))
         {
+            territoryManager?.HandlePlayerEnteredCell(nextCell);
             return;
         }
 

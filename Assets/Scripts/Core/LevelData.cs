@@ -39,6 +39,7 @@ public sealed class LevelClaimedArea
 [Serializable]
 public sealed class LevelBallData
 {
+    public string ballType = "Normal";
     public LevelCell spawnCell = new LevelCell();
     public LevelVector2 direction = new LevelVector2 { x = 1f, y = 1f };
     public float speed = 4f;

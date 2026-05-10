@@ -1,9 +1,9 @@
 {
-  "levelNumber": 1,
+  "levelNumber": 3,
   "width": 40,
   "height": 40,
   "cellSize": 1.0,
-  "requiredCapturePercentage": 75.0,
+  "requiredCapturePercentage": 80.0,
   "playerSpawnCell": {
     "x": 20,
     "y": 0
@@ -32,32 +32,55 @@
       "y": 0,
       "width": 1,
       "height": 40
+    },
+    {
+      "x": 14,
+      "y": 14,
+      "width": 12,
+      "height": 12
     }
   ],
   "initiallyClaimedCells": [],
   "balls": [
     {
+      "ballType": "Eater",
       "spawnCell": {
-        "x": 28,
+        "x": 10,
         "y": 28
       },
       "direction": {
-        "x": -0.856287,
-        "y": 0.5165003
+        "x": 0.7976006,
+        "y": -0.60318595
       },
-      "speed": 10.0,
+      "speed": 9.0,
       "hitRadius": 0.9,
       "playerHitRadius": 0.9,
       "groundOffset": 1.0
     },
     {
+      "ballType": "Eater",
       "spawnCell": {
-        "x": 12,
-        "y": 24
+        "x": 30,
+        "y": 27
       },
       "direction": {
-        "x": 0.7976006,
-        "y": 0.60318595
+        "x": -0.856287,
+        "y": -0.5165003
+      },
+      "speed": 9.5,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1.0
+    },
+    {
+      "ballType": "Eater",
+      "spawnCell": {
+        "x": 20,
+        "y": 10
+      },
+      "direction": {
+        "x": 0.6507914,
+        "y": 0.7592566
       },
       "speed": 10.0,
       "hitRadius": 0.9,
