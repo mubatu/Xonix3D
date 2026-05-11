@@ -157,7 +157,9 @@ MonoBehaviour:
   balls: []
   pathBurnSpreadInterval: 0.03
   enableCaptureProfilingHotkeys: 1
-  logCaptureProfileKey: 288
+  useReusableCaptureBuffers: 1
+  logCaptureProfileKey: 287
+  toggleCaptureProfileModeKey: 288
   logCaptureProfileAfterComplete: 1
 --- !u!4 &553481387
 Transform:
