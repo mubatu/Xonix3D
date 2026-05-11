@@ -1,0 +1,7 @@
+grid_size,grid_cells,balls,mode,captured_cells,complete_path_avg_ms
+40x40,1600,4,naive,722,0.9300
+40x40,1600,4,optimized,722,0.4988
+60x60,3600,4,naive,2722,6.3226
+60x60,3600,4,optimized,2722,0.5739
+80x80,6400,4,naive,5522,24.0964
+80x80,6400,4,optimized,5522,0.6447
