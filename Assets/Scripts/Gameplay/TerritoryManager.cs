@@ -1,12 +1,23 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Unity.Profiling;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 public sealed class TerritoryManager : MonoBehaviour
 {
     private static readonly ProfilerMarker AddTemporaryPathCellMarker = new("Xonix.PathTiles.AddTemporaryPathCell");
     private static readonly ProfilerMarker CancelTemporaryPathMarker = new("Xonix.PathTiles.CancelTemporaryPath");
+    private static readonly ProfilerMarker CompletePathMarker = new("Xonix.Capture.CompletePath");
+    private static readonly ProfilerMarker CaptureResolutionMarker = new("Xonix.Capture.ResolveTerritory");
+    private static readonly ProfilerMarker FindReachableCellsMarker = new("Xonix.Capture.FindReachableFromBalls");
+    private static readonly ProfilerMarker FloodFillFromBallMarker = new("Xonix.Capture.FloodFillFromBall");
+    private static readonly ProfilerMarker FloodFillUnclaimedMarker = new("Xonix.Capture.FloodFillUnclaimed");
+    private static readonly ProfilerMarker ClaimUnreachableCellsMarker = new("Xonix.Capture.ClaimUnreachableCells");
+    private static readonly ProfilerMarker ClaimTemporaryPathCellsMarker = new("Xonix.Capture.ClaimTemporaryPathCells");
+    private static readonly ProfilerMarker CalculateCapturedPercentageMarker = new("Xonix.Capture.CalculateCapturedPercentage");
 
     private static readonly Vector2Int[] FloodFillDirections =
     {
@@ -25,11 +36,42 @@ public sealed class TerritoryManager : MonoBehaviour
     [Header("Path Danger")]
     [SerializeField] private float pathBurnSpreadInterval = 0.18f;
 
+    [Header("Profiling Debug")]
+    [SerializeField] private bool enableCaptureProfilingHotkeys = true;
+    [SerializeField] private bool useReusableCaptureBuffers = true;
+    [SerializeField] private KeyCode logCaptureProfileKey = KeyCode.F11;
+    [SerializeField] private KeyCode toggleCaptureProfileModeKey = KeyCode.F12;
+    [SerializeField] private bool logCaptureProfileAfterComplete = true;
+
     private readonly List<Vector2Int> temporaryPathCells = new();
     private readonly HashSet<int> burningPathIndices = new();
+    private readonly Queue<Vector2Int> floodFillOpenCells = new();
+    private readonly List<Vector2Int> newlyClaimedCellsBuffer = new();
     private bool isDrawing;
     private float capturedPercentage;
     private Coroutine pathBurnRoutine;
+    private int[,] reachableFromBalls;
+    private int reachableGeneration;
+    private int captureProfileSamples;
+    private int captureProfileLastGridCells;
+    private int captureProfileLastBallCount;
+    private int captureProfileLastPathCells;
+    private int captureProfileLastCapturedCells;
+    private int captureProfileTotalCapturedCells;
+    private long captureProfileLastTicks;
+    private long captureProfileTotalTicks;
+    private long captureProfileMaxTicks;
+    private long captureProfileLastAllocatedBytes;
+    private long captureProfileTotalAllocatedBytes;
+    private int floodFillProfileLastCalls;
+    private int floodFillProfileTotalCalls;
+    private int floodFillProfileLastVisitedCells;
+    private int floodFillProfileTotalVisitedCells;
+    private int floodFillProfileLastMaxQueue;
+    private int floodFillProfileMaxQueue;
+    private long floodFillProfileLastTicks;
+    private long floodFillProfileTotalTicks;
+    private long floodFillProfileMaxTicks;
 
     public bool IsDrawing => isDrawing;
     public IReadOnlyList<Vector2Int> TemporaryPathCells => temporaryPathCells;
@@ -55,6 +97,19 @@ public sealed class TerritoryManager : MonoBehaviour
         RefreshBallReferences();
         capturedPercentage = CalculateCapturedPercentage();
         gameManager?.HandleCaptureUpdated(capturedPercentage);
+    }
+
+    private void Update()
+    {
+        if (enableCaptureProfilingHotkeys && Input.GetKeyDown(logCaptureProfileKey))
+        {
+            LogAndResetCaptureProfileSamples();
+        }
+
+        if (enableCaptureProfilingHotkeys && Input.GetKeyDown(toggleCaptureProfileModeKey))
+        {
+            ToggleCaptureProfilingMode();
+        }
     }
 
     public void HandlePlayerEnteredCell(Vector2Int cell)
@@ -187,42 +242,57 @@ public sealed class TerritoryManager : MonoBehaviour
 
     private void CompletePath()
     {
-        RefreshBallReferences();
+        bool shouldLogCaptureSample = false;
+        int roundedCapturedPercentage = 0;
 
-        if (burningPathIndices.Count > 0)
+        using (CompletePathMarker.Auto())
         {
-            CompleteDamagedPath();
-            return;
-        }
+            RefreshBallReferences();
 
-        bool[,] reachableFromBalls = FindReachableUnclaimedCellsFromBalls();
-        List<Vector2Int> newlyClaimedCells = new();
-
-        for (int x = 0; x < gridManager.Width; x++)
-        {
-            for (int y = 0; y < gridManager.Height; y++)
+            if (burningPathIndices.Count > 0)
             {
-                Vector2Int cell = new Vector2Int(x, y);
-                if (gridManager.GetCellState(cell) == CellState.Unclaimed && !reachableFromBalls[x, y])
-                {
-                    gridManager.SetCellState(cell, CellState.Claimed);
-                    AddNewlyClaimedCell(newlyClaimedCells, cell);
-                }
+                CompleteDamagedPath();
+                return;
             }
+
+            ResetCurrentCaptureFloodFillProfile();
+
+            int pathCellCount = temporaryPathCells.Count;
+            int capturedCellCount;
+            List<Vector2Int> newlyClaimedCells;
+            long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            long ticksBefore = Stopwatch.GetTimestamp();
+
+            using (CaptureResolutionMarker.Auto())
+            {
+                newlyClaimedCells = useReusableCaptureBuffers ? newlyClaimedCellsBuffer : new List<Vector2Int>();
+                newlyClaimedCells.Clear();
+                capturedCellCount = useReusableCaptureBuffers
+                    ? ResolveTerritoryWithReusableBuffers(newlyClaimedCells)
+                    : ResolveTerritoryWithNaiveAllocations(newlyClaimedCells);
+
+                temporaryPathCells.Clear();
+                isDrawing = false;
+                capturedPercentage = CalculateCapturedPercentage();
+            }
+
+            long elapsedTicks = Stopwatch.GetTimestamp() - ticksBefore;
+            long allocatedBytes = Math.Max(0L, GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
+
+            RecordCaptureProfileSample(elapsedTicks, allocatedBytes, capturedCellCount, pathCellCount);
+
+            gridManager.PlayCapturePulse(newlyClaimedCells);
+            gameManager?.HandleCaptureUpdated(capturedPercentage);
+            shouldLogCaptureSample = logCaptureProfileAfterComplete;
+            roundedCapturedPercentage = Mathf.RoundToInt(capturedPercentage);
         }
 
-        foreach (Vector2Int pathCell in temporaryPathCells)
+        if (shouldLogCaptureSample)
         {
-            gridManager.SetCellState(pathCell, CellState.Claimed);
-            AddNewlyClaimedCell(newlyClaimedCells, pathCell);
+            LogCaptureProfileLastSample();
         }
 
-        temporaryPathCells.Clear();
-        isDrawing = false;
-        capturedPercentage = CalculateCapturedPercentage();
-        gridManager.PlayCapturePulse(newlyClaimedCells);
-        gameManager?.HandleCaptureUpdated(capturedPercentage);
-        Debug.Log($"Captured: {Mathf.RoundToInt(capturedPercentage)}%");
+        Debug.Log($"Captured: {roundedCapturedPercentage}%");
     }
 
     private void CompleteDamagedPath()
@@ -380,55 +450,203 @@ public sealed class TerritoryManager : MonoBehaviour
         burningPathIndices.Clear();
     }
 
-    private bool[,] FindReachableUnclaimedCellsFromBalls()
+    public void ResetCaptureProfileSamples()
     {
-        bool[,] reachable = new bool[gridManager.Width, gridManager.Height];
-
-        foreach (BallController ball in balls)
-        {
-            if (ball == null)
-            {
-                continue;
-            }
-
-            FloodFillFromBall(ball, reachable);
-        }
-
-        return reachable;
+        captureProfileSamples = 0;
+        captureProfileLastGridCells = 0;
+        captureProfileLastBallCount = 0;
+        captureProfileLastPathCells = 0;
+        captureProfileLastCapturedCells = 0;
+        captureProfileTotalCapturedCells = 0;
+        captureProfileLastTicks = 0;
+        captureProfileTotalTicks = 0;
+        captureProfileMaxTicks = 0;
+        captureProfileLastAllocatedBytes = 0;
+        captureProfileTotalAllocatedBytes = 0;
+        floodFillProfileLastCalls = 0;
+        floodFillProfileTotalCalls = 0;
+        floodFillProfileLastVisitedCells = 0;
+        floodFillProfileTotalVisitedCells = 0;
+        floodFillProfileLastMaxQueue = 0;
+        floodFillProfileMaxQueue = 0;
+        floodFillProfileLastTicks = 0;
+        floodFillProfileTotalTicks = 0;
+        floodFillProfileMaxTicks = 0;
     }
 
-    private void FloodFillFromBall(BallController ball, bool[,] reachable)
+    public void LogAndResetCaptureProfileSamples()
     {
-        Vector3 ballPosition = ball.transform.position;
-        float radius = Mathf.Max(0f, ball.HitRadius);
-        Vector2Int minCell = gridManager.WorldToGrid(new Vector3(ballPosition.x - radius, ballPosition.y, ballPosition.z - radius));
-        Vector2Int maxCell = gridManager.WorldToGrid(new Vector3(ballPosition.x + radius, ballPosition.y, ballPosition.z + radius));
-
-        bool foundSeedCell = false;
-        for (int x = minCell.x; x <= maxCell.x; x++)
+        if (captureProfileSamples == 0)
         {
-            for (int y = minCell.y; y <= maxCell.y; y++)
+            Debug.Log("Xonix capture profile: no completed capture samples yet.");
+            return;
+        }
+
+        double completeLastMs = TicksToMilliseconds(captureProfileLastTicks);
+        double completeAvgMs = TicksToMilliseconds(captureProfileTotalTicks) / captureProfileSamples;
+        double completeMaxMs = TicksToMilliseconds(captureProfileMaxTicks);
+        double floodLastMs = TicksToMilliseconds(floodFillProfileLastTicks);
+        double floodAvgMs = TicksToMilliseconds(floodFillProfileTotalTicks) / captureProfileSamples;
+        double floodMaxCallMs = TicksToMilliseconds(floodFillProfileMaxTicks);
+        double gcLastKb = captureProfileLastAllocatedBytes / 1024.0;
+        double gcAvgKb = captureProfileTotalAllocatedBytes / 1024.0 / captureProfileSamples;
+        double capturedAvg = (double)captureProfileTotalCapturedCells / captureProfileSamples;
+
+        Debug.Log(
+            "Xonix capture profile: "
+            + $"mode={GetCaptureProfilingModeName()}, "
+            + $"samples={captureProfileSamples}, "
+            + $"gridCells={captureProfileLastGridCells}, "
+            + $"balls={captureProfileLastBallCount}, "
+            + $"pathCellsLast={captureProfileLastPathCells}, "
+            + $"capturedCellsLast={captureProfileLastCapturedCells}, "
+            + $"capturedCellsAvg={capturedAvg:F1}, "
+            + $"completePathCpuMs(last/avg/max)={completeLastMs:F4}/{completeAvgMs:F4}/{completeMaxMs:F4}, "
+            + $"floodFillCpuMs(last/avgPerCapture/maxCall)={floodLastMs:F4}/{floodAvgMs:F4}/{floodMaxCallMs:F4}, "
+            + $"floodFillCallsLast={floodFillProfileLastCalls}, "
+            + $"floodFillCellsLast={floodFillProfileLastVisitedCells}, "
+            + $"floodFillCallsTotal={floodFillProfileTotalCalls}, "
+            + $"maxQueueLast={floodFillProfileLastMaxQueue}, "
+            + $"maxQueueOverall={floodFillProfileMaxQueue}, "
+            + $"gcKB(last/avg)={gcLastKb:F3}/{gcAvgKb:F3}"
+        );
+
+        ResetCaptureProfileSamples();
+    }
+
+    private void ToggleCaptureProfilingMode()
+    {
+        useReusableCaptureBuffers = !useReusableCaptureBuffers;
+        ResetCaptureProfileSamples();
+        Debug.Log($"Xonix capture profiling mode: mode={GetCaptureProfilingModeName()}. Capture samples reset.");
+    }
+
+    private int ResolveTerritoryWithReusableBuffers(List<Vector2Int> newlyClaimedCells)
+    {
+        PrepareReachabilityMap();
+        FindReachableUnclaimedCellsFromBalls();
+        int capturedCellCount = ClaimUnreachableUnclaimedCells(newlyClaimedCells);
+        capturedCellCount += ClaimTemporaryPathCells(newlyClaimedCells);
+        return capturedCellCount;
+    }
+
+    private int ResolveTerritoryWithNaiveAllocations(List<Vector2Int> newlyClaimedCells)
+    {
+        bool[,] reachable = FindReachableUnclaimedCellsFromBallsNaive();
+        int capturedCellCount = ClaimUnreachableUnclaimedCellsNaive(newlyClaimedCells, reachable);
+        capturedCellCount += ClaimTemporaryPathCells(newlyClaimedCells);
+        return capturedCellCount;
+    }
+
+    private void FindReachableUnclaimedCellsFromBalls()
+    {
+        using (FindReachableCellsMarker.Auto())
+        {
+            foreach (BallController ball in balls)
             {
-                Vector2Int cell = new Vector2Int(x, y);
-                if (!IsValidBallSeedCell(cell, ballPosition, radius))
+                if (ball == null)
                 {
                     continue;
                 }
 
-                foundSeedCell = true;
-                FloodFillUnclaimed(cell, reachable);
+                FloodFillFromBall(ball);
             }
         }
+    }
 
-        if (foundSeedCell)
+    private bool[,] FindReachableUnclaimedCellsFromBallsNaive()
+    {
+        using (FindReachableCellsMarker.Auto())
         {
-            return;
+            bool[,] reachable = new bool[gridManager.Width, gridManager.Height];
+
+            foreach (BallController ball in balls)
+            {
+                if (ball == null)
+                {
+                    continue;
+                }
+
+                FloodFillFromBallNaive(ball, reachable);
+            }
+
+            return reachable;
         }
+    }
 
-        Vector2Int fallbackCell = ball.CurrentCell;
-        if (gridManager.IsInsideGrid(fallbackCell) && gridManager.GetCellState(fallbackCell) == CellState.Unclaimed)
+    private void FloodFillFromBall(BallController ball)
+    {
+        using (FloodFillFromBallMarker.Auto())
         {
-            FloodFillUnclaimed(fallbackCell, reachable);
+            Vector3 ballPosition = ball.transform.position;
+            float radius = Mathf.Max(0f, ball.HitRadius);
+            Vector2Int minCell = gridManager.WorldToGrid(new Vector3(ballPosition.x - radius, ballPosition.y, ballPosition.z - radius));
+            Vector2Int maxCell = gridManager.WorldToGrid(new Vector3(ballPosition.x + radius, ballPosition.y, ballPosition.z + radius));
+
+            bool foundSeedCell = false;
+            for (int x = minCell.x; x <= maxCell.x; x++)
+            {
+                for (int y = minCell.y; y <= maxCell.y; y++)
+                {
+                    Vector2Int cell = new Vector2Int(x, y);
+                    if (!IsValidBallSeedCell(cell, ballPosition, radius))
+                    {
+                        continue;
+                    }
+
+                    foundSeedCell = true;
+                    FloodFillUnclaimed(cell);
+                }
+            }
+
+            if (foundSeedCell)
+            {
+                return;
+            }
+
+            Vector2Int fallbackCell = ball.CurrentCell;
+            if (gridManager.IsInsideGrid(fallbackCell) && gridManager.GetCellState(fallbackCell) == CellState.Unclaimed)
+            {
+                FloodFillUnclaimed(fallbackCell);
+            }
+        }
+    }
+
+    private void FloodFillFromBallNaive(BallController ball, bool[,] reachable)
+    {
+        using (FloodFillFromBallMarker.Auto())
+        {
+            Vector3 ballPosition = ball.transform.position;
+            float radius = Mathf.Max(0f, ball.HitRadius);
+            Vector2Int minCell = gridManager.WorldToGrid(new Vector3(ballPosition.x - radius, ballPosition.y, ballPosition.z - radius));
+            Vector2Int maxCell = gridManager.WorldToGrid(new Vector3(ballPosition.x + radius, ballPosition.y, ballPosition.z + radius));
+
+            bool foundSeedCell = false;
+            for (int x = minCell.x; x <= maxCell.x; x++)
+            {
+                for (int y = minCell.y; y <= maxCell.y; y++)
+                {
+                    Vector2Int cell = new Vector2Int(x, y);
+                    if (!IsValidBallSeedCell(cell, ballPosition, radius))
+                    {
+                        continue;
+                    }
+
+                    foundSeedCell = true;
+                    FloodFillUnclaimedNaive(cell, reachable);
+                }
+            }
+
+            if (foundSeedCell)
+            {
+                return;
+            }
+
+            Vector2Int fallbackCell = ball.CurrentCell;
+            if (gridManager.IsInsideGrid(fallbackCell) && gridManager.GetCellState(fallbackCell) == CellState.Unclaimed)
+            {
+                FloodFillUnclaimedNaive(fallbackCell, reachable);
+            }
         }
     }
 
@@ -450,59 +668,118 @@ public sealed class TerritoryManager : MonoBehaviour
         return dx * dx + dz * dz <= radiusWithPadding * radiusWithPadding;
     }
 
-    private void FloodFillUnclaimed(Vector2Int startCell, bool[,] reachable)
+    private void FloodFillUnclaimedNaive(Vector2Int startCell, bool[,] reachable)
     {
-        if (reachable[startCell.x, startCell.y])
+        using (FloodFillUnclaimedMarker.Auto())
         {
-            return;
-        }
+            long ticksBefore = Stopwatch.GetTimestamp();
+            int visitedCells = 0;
+            int maxQueueCount = 0;
 
-        Queue<Vector2Int> openCells = new();
-        reachable[startCell.x, startCell.y] = true;
-        openCells.Enqueue(startCell);
-
-        while (openCells.Count > 0)
-        {
-            Vector2Int currentCell = openCells.Dequeue();
-            foreach (Vector2Int direction in FloodFillDirections)
+            if (reachable[startCell.x, startCell.y])
             {
-                Vector2Int neighbor = currentCell + direction;
-                if (!gridManager.IsInsideGrid(neighbor)
-                    || reachable[neighbor.x, neighbor.y]
-                    || gridManager.GetCellState(neighbor) != CellState.Unclaimed)
-                {
-                    continue;
-                }
-
-                reachable[neighbor.x, neighbor.y] = true;
-                openCells.Enqueue(neighbor);
+                RecordFloodFillProfileSample(Stopwatch.GetTimestamp() - ticksBefore, 0, 0);
+                return;
             }
+
+            Queue<Vector2Int> openCells = new();
+            reachable[startCell.x, startCell.y] = true;
+            openCells.Enqueue(startCell);
+
+            while (openCells.Count > 0)
+            {
+                maxQueueCount = Mathf.Max(maxQueueCount, openCells.Count);
+                Vector2Int currentCell = openCells.Dequeue();
+                visitedCells++;
+
+                foreach (Vector2Int direction in FloodFillDirections)
+                {
+                    Vector2Int neighbor = currentCell + direction;
+                    if (!gridManager.IsInsideGrid(neighbor)
+                        || reachable[neighbor.x, neighbor.y]
+                        || gridManager.GetCellState(neighbor) != CellState.Unclaimed)
+                    {
+                        continue;
+                    }
+
+                    reachable[neighbor.x, neighbor.y] = true;
+                    openCells.Enqueue(neighbor);
+                }
+            }
+
+            RecordFloodFillProfileSample(Stopwatch.GetTimestamp() - ticksBefore, visitedCells, maxQueueCount);
+        }
+    }
+
+    private void FloodFillUnclaimed(Vector2Int startCell)
+    {
+        using (FloodFillUnclaimedMarker.Auto())
+        {
+            long ticksBefore = Stopwatch.GetTimestamp();
+            int visitedCells = 0;
+            int maxQueueCount = 0;
+
+            if (IsMarkedReachable(startCell.x, startCell.y))
+            {
+                RecordFloodFillProfileSample(Stopwatch.GetTimestamp() - ticksBefore, 0, 0);
+                return;
+            }
+
+            floodFillOpenCells.Clear();
+            MarkReachable(startCell.x, startCell.y);
+            floodFillOpenCells.Enqueue(startCell);
+
+            while (floodFillOpenCells.Count > 0)
+            {
+                maxQueueCount = Mathf.Max(maxQueueCount, floodFillOpenCells.Count);
+                Vector2Int currentCell = floodFillOpenCells.Dequeue();
+                visitedCells++;
+
+                foreach (Vector2Int direction in FloodFillDirections)
+                {
+                    Vector2Int neighbor = currentCell + direction;
+                    if (!gridManager.IsInsideGrid(neighbor)
+                        || IsMarkedReachable(neighbor.x, neighbor.y)
+                        || gridManager.GetCellState(neighbor) != CellState.Unclaimed)
+                    {
+                        continue;
+                    }
+
+                    MarkReachable(neighbor.x, neighbor.y);
+                    floodFillOpenCells.Enqueue(neighbor);
+                }
+            }
+
+            RecordFloodFillProfileSample(Stopwatch.GetTimestamp() - ticksBefore, visitedCells, maxQueueCount);
         }
     }
 
     private float CalculateCapturedPercentage()
     {
-        if (gridManager == null || gridManager.Width <= 0 || gridManager.Height <= 0)
+        using (CalculateCapturedPercentageMarker.Auto())
         {
-            return 0f;
-        }
-
-        int claimedCells = 0;
-        int totalCells = gridManager.Width * gridManager.Height;
-
-        for (int x = 0; x < gridManager.Width; x++)
-        {
-            for (int y = 0; y < gridManager.Height; y++)
+            if (gridManager == null || gridManager.Width <= 0 || gridManager.Height <= 0)
             {
-                CellState cellState = gridManager.GetCellState(new Vector2Int(x, y));
-                if (cellState == CellState.Claimed || cellState == CellState.TemporaryPath || cellState == CellState.BurningPath)
+                return 0f;
+            }
+
+            int claimedCells = 0;
+            int totalCells = gridManager.Width * gridManager.Height;
+
+            for (int x = 0; x < gridManager.Width; x++)
+            {
+                for (int y = 0; y < gridManager.Height; y++)
                 {
-                    claimedCells++;
+                    CellState cellState = gridManager.GetCellState(new Vector2Int(x, y));
+                    if (cellState == CellState.Claimed || cellState == CellState.TemporaryPath || cellState == CellState.BurningPath)
+                    {
+                        claimedCells++;
+                    }
                 }
             }
-        }
 
-        return (float)claimedCells / totalCells * 100f;
+            return (float)claimedCells / totalCells * 100f;
+        }
     }
 
     private void RefreshBallReferences()
@@ -518,11 +795,170 @@ public sealed class TerritoryManager : MonoBehaviour
         }
     }
 
-    private static void AddNewlyClaimedCell(List<Vector2Int> cells, Vector2Int cell)
+    private void PrepareReachabilityMap()
     {
-        if (!cells.Contains(cell))
+        int width = gridManager.Width;
+        int height = gridManager.Height;
+        if (reachableFromBalls == null || reachableFromBalls.GetLength(0) != width || reachableFromBalls.GetLength(1) != height)
         {
-            cells.Add(cell);
+            reachableFromBalls = new int[width, height];
+            reachableGeneration = 0;
         }
+
+        reachableGeneration++;
+        if (reachableGeneration == int.MaxValue)
+        {
+            Array.Clear(reachableFromBalls, 0, reachableFromBalls.Length);
+            reachableGeneration = 1;
+        }
+    }
+
+    private int ClaimUnreachableUnclaimedCells(List<Vector2Int> newlyClaimedCells)
+    {
+        using (ClaimUnreachableCellsMarker.Auto())
+        {
+            int capturedCellCount = 0;
+            for (int x = 0; x < gridManager.Width; x++)
+            {
+                for (int y = 0; y < gridManager.Height; y++)
+                {
+                    Vector2Int cell = new Vector2Int(x, y);
+                    if (gridManager.GetCellState(cell) == CellState.Unclaimed && !IsMarkedReachable(x, y))
+                    {
+                        newlyClaimedCells.Add(cell);
+                        capturedCellCount++;
+                    }
+                }
+            }
+
+            gridManager.SetCellStatesBulk(newlyClaimedCells, CellState.Claimed);
+            return capturedCellCount;
+        }
+    }
+
+    private int ClaimTemporaryPathCells(List<Vector2Int> newlyClaimedCells)
+    {
+        using (ClaimTemporaryPathCellsMarker.Auto())
+        {
+            int capturedCellCount = 0;
+            foreach (Vector2Int pathCell in temporaryPathCells)
+            {
+                newlyClaimedCells.Add(pathCell);
+                capturedCellCount++;
+            }
+
+            gridManager.SetCellStatesBulk(temporaryPathCells, CellState.Claimed);
+            return capturedCellCount;
+        }
+    }
+
+    private int ClaimUnreachableUnclaimedCellsNaive(List<Vector2Int> newlyClaimedCells, bool[,] reachable)
+    {
+        using (ClaimUnreachableCellsMarker.Auto())
+        {
+            int capturedCellCount = 0;
+            for (int x = 0; x < gridManager.Width; x++)
+            {
+                for (int y = 0; y < gridManager.Height; y++)
+                {
+                    Vector2Int cell = new Vector2Int(x, y);
+                    if (gridManager.GetCellState(cell) == CellState.Unclaimed && !reachable[x, y])
+                    {
+                        gridManager.SetCellState(cell, CellState.Claimed);
+                        if (AddNewlyClaimedCell(newlyClaimedCells, cell))
+                        {
+                            capturedCellCount++;
+                        }
+                    }
+                }
+            }
+
+            return capturedCellCount;
+        }
+    }
+
+    private bool IsMarkedReachable(int x, int y)
+    {
+        return reachableFromBalls != null && reachableFromBalls[x, y] == reachableGeneration;
+    }
+
+    private void MarkReachable(int x, int y)
+    {
+        reachableFromBalls[x, y] = reachableGeneration;
+    }
+
+    private void ResetCurrentCaptureFloodFillProfile()
+    {
+        floodFillProfileLastCalls = 0;
+        floodFillProfileLastVisitedCells = 0;
+        floodFillProfileLastMaxQueue = 0;
+        floodFillProfileLastTicks = 0;
+    }
+
+    private void RecordFloodFillProfileSample(long elapsedTicks, int visitedCells, int maxQueueCount)
+    {
+        floodFillProfileLastCalls++;
+        floodFillProfileTotalCalls++;
+        floodFillProfileLastVisitedCells += visitedCells;
+        floodFillProfileTotalVisitedCells += visitedCells;
+        floodFillProfileLastMaxQueue = Mathf.Max(floodFillProfileLastMaxQueue, maxQueueCount);
+        floodFillProfileMaxQueue = Mathf.Max(floodFillProfileMaxQueue, maxQueueCount);
+        floodFillProfileLastTicks += elapsedTicks;
+        floodFillProfileTotalTicks += elapsedTicks;
+        floodFillProfileMaxTicks = Math.Max(floodFillProfileMaxTicks, elapsedTicks);
+    }
+
+    private void RecordCaptureProfileSample(long elapsedTicks, long allocatedBytes, int capturedCellCount, int pathCellCount)
+    {
+        captureProfileSamples++;
+        captureProfileLastGridCells = gridManager.Width * gridManager.Height;
+        captureProfileLastBallCount = balls.Count;
+        captureProfileLastPathCells = pathCellCount;
+        captureProfileLastCapturedCells = capturedCellCount;
+        captureProfileTotalCapturedCells += capturedCellCount;
+        captureProfileLastTicks = elapsedTicks;
+        captureProfileTotalTicks += elapsedTicks;
+        captureProfileMaxTicks = Math.Max(captureProfileMaxTicks, elapsedTicks);
+        captureProfileLastAllocatedBytes = allocatedBytes;
+        captureProfileTotalAllocatedBytes += allocatedBytes;
+    }
+
+    private void LogCaptureProfileLastSample()
+    {
+        Debug.Log(
+            "Xonix capture sample: "
+            + $"mode={GetCaptureProfilingModeName()}, "
+            + $"gridCells={captureProfileLastGridCells}, "
+            + $"balls={captureProfileLastBallCount}, "
+            + $"pathCells={captureProfileLastPathCells}, "
+            + $"capturedCells={captureProfileLastCapturedCells}, "
+            + $"completePathCpuMs={TicksToMilliseconds(captureProfileLastTicks):F4}, "
+            + $"floodFillCpuMs={TicksToMilliseconds(floodFillProfileLastTicks):F4}, "
+            + $"floodFillCalls={floodFillProfileLastCalls}, "
+            + $"floodFillCells={floodFillProfileLastVisitedCells}, "
+            + $"maxQueue={floodFillProfileLastMaxQueue}, "
+            + $"gcKB={captureProfileLastAllocatedBytes / 1024.0:F3}"
+        );
+    }
+
+    private string GetCaptureProfilingModeName()
+    {
+        return useReusableCaptureBuffers ? "optimized" : "naive";
+    }
+
+    private static double TicksToMilliseconds(long ticks)
+    {
+        return ticks * 1000.0 / Stopwatch.Frequency;
+    }
+
+    private static bool AddNewlyClaimedCell(List<Vector2Int> cells, Vector2Int cell)
+    {
+        if (cells.Contains(cell))
+        {
+            return false;
+        }
+
+        cells.Add(cell);
+        return true;
     }
 }

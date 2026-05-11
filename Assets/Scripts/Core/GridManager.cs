@@ -9,6 +9,7 @@ using Debug = UnityEngine.Debug;
 public sealed class GridManager : MonoBehaviour
 {
     private static readonly ProfilerMarker SetCellStateMarker = new("Xonix.Grid.SetCellState");
+    private static readonly ProfilerMarker SetCellStatesBulkMarker = new("Xonix.Grid.SetCellStatesBulk");
     private static readonly ProfilerMarker RefreshCellVisualMarker = new("Xonix.PathTiles.RefreshCellVisual");
     private static readonly ProfilerMarker PathTileShowMarker = new("Xonix.PathTiles.ShowOrReuse");
     private static readonly ProfilerMarker PathTileReuseMarker = new("Xonix.PathTiles.ReuseRenderer");
@@ -152,6 +153,45 @@ public sealed class GridManager : MonoBehaviour
 
             grid[cell.x, cell.y] = state;
             RefreshCellVisual(cell);
+        }
+    }
+
+    public void SetCellStatesBulk(IReadOnlyList<Vector2Int> cells, CellState state)
+    {
+        using (SetCellStatesBulkMarker.Auto())
+        {
+            InitializeIfNeeded();
+
+            if (cells == null || cells.Count == 0)
+            {
+                return;
+            }
+
+            bool stateNeedsPathTile = state == CellState.TemporaryPath || state == CellState.BurningPath;
+            for (int i = 0; i < cells.Count; i++)
+            {
+                Vector2Int cell = cells[i];
+                if (!IsInsideGridBounds(cell.x, cell.y))
+                {
+                    continue;
+                }
+
+                grid[cell.x, cell.y] = state;
+
+                if (stateNeedsPathTile)
+                {
+                    RefreshCellVisual(cell);
+                    continue;
+                }
+
+                Renderer pathTileRenderer = pathTileRenderers != null ? pathTileRenderers[cell.x, cell.y] : null;
+                if (pathTileRenderer != null)
+                {
+                    pathTileRenderer.gameObject.SetActive(false);
+                }
+            }
+
+            groundMeshesDirty = true;
         }
     }
 
