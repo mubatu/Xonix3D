@@ -23,6 +23,7 @@ public sealed class GameHud : MonoBehaviour
     private Font font;
     private GameObject statusPanel;
     private Text levelText;
+    private Text timerText;
     private Text captureText;
     private Image captureFill;
     private Image[] lifeHearts;
@@ -68,16 +69,19 @@ public sealed class GameHud : MonoBehaviour
         levelPanel.anchorMax = new Vector2(0f, 1f);
         levelPanel.pivot = new Vector2(0f, 1f);
         levelPanel.anchoredPosition = new Vector2(24f, -24f);
-        levelPanel.sizeDelta = new Vector2(440f, 124f);
+        levelPanel.sizeDelta = new Vector2(440f, 154f);
 
         levelText = CreateText("Level Text", levelPanel, 24, FontStyle.Bold, TextAnchor.MiddleLeft);
         SetRect(levelText.rectTransform, new Vector2(20f, -20f), new Vector2(150f, 34f), new Vector2(0f, 1f));
 
+        timerText = CreateText("Timer Text", levelPanel, 24, FontStyle.Bold, TextAnchor.MiddleRight);
+        SetRect(timerText.rectTransform, new Vector2(270f, -20f), new Vector2(150f, 34f), new Vector2(0f, 1f));
+
         captureText = CreateText("Capture Text", levelPanel, 20, FontStyle.Bold, TextAnchor.MiddleLeft);
-        SetRect(captureText.rectTransform, new Vector2(20f, -60f), new Vector2(330f, 28f), new Vector2(0f, 1f));
+        SetRect(captureText.rectTransform, new Vector2(20f, -72f), new Vector2(330f, 28f), new Vector2(0f, 1f));
 
         RectTransform progressBack = CreatePanel("Capture Progress Back", levelPanel, progressBackColor);
-        SetRect(progressBack, new Vector2(20f, -94f), new Vector2(400f, 14f), new Vector2(0f, 1f));
+        SetRect(progressBack, new Vector2(20f, -106f), new Vector2(400f, 14f), new Vector2(0f, 1f));
 
         RectTransform livesPanel = CreatePanel("Lives Panel", statusRoot, panelColor);
         livesPanel.anchorMin = new Vector2(1f, 1f);
@@ -173,6 +177,7 @@ public sealed class GameHud : MonoBehaviour
         float normalizedCapture = Mathf.Clamp01(gameManager.CapturedPercentage / required);
 
         levelText.text = $"LEVEL {gameManager.LevelNumber}";
+        timerText.text = $"TIME {FormatTimer(gameManager.RemainingTimerSeconds)}";
         captureText.text = $"CAPTURED {capturedRounded}% / {requiredRounded}%";
         captureFill.rectTransform.anchorMax = new Vector2(normalizedCapture, 1f);
 
@@ -230,7 +235,15 @@ public sealed class GameHud : MonoBehaviour
             return "All levels complete";
         }
 
-        return gameManager.IsLevelComplete ? "Press Enter or Next Level" : "Run ended";
+        return gameManager.IsLevelComplete ? "Press Enter or Next Level" : gameManager.GameOverPrompt;
+    }
+
+    private static string FormatTimer(float seconds)
+    {
+        int totalSeconds = Mathf.CeilToInt(Mathf.Max(0f, seconds));
+        int minutes = totalSeconds / 60;
+        int remainingSeconds = totalSeconds % 60;
+        return $"{minutes:00}:{remainingSeconds:00}";
     }
 
     private Canvas CreateCanvas()

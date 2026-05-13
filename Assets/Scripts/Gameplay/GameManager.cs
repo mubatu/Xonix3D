@@ -49,6 +49,9 @@ public sealed class GameManager : MonoBehaviour
     private bool isRespawning;
     private float capturedPercentage;
     private float requiredCapturePercentage = 75f;
+    private float levelTimerSeconds = 60f;
+    private float remainingTimerSeconds = 60f;
+    private string gameOverPrompt = "Run ended";
     private int lastDeathFrame = -1;
     private int currentLevelIndex;
     private TextAsset[] levelFiles;
@@ -63,6 +66,9 @@ public sealed class GameManager : MonoBehaviour
     public int Lives => lives;
     public float CapturedPercentage => capturedPercentage;
     public float RequiredCapturePercentage => requiredCapturePercentage;
+    public float RemainingTimerSeconds => remainingTimerSeconds;
+    public float LevelTimerSeconds => levelTimerSeconds;
+    public string GameOverPrompt => gameOverPrompt;
     public bool HasStarted => hasStarted;
     public bool IsGameOver => isGameOver;
     public bool IsLevelComplete => isLevelComplete;
@@ -104,6 +110,8 @@ public sealed class GameManager : MonoBehaviour
             ReloadCurrentLevelFromJson();
             return;
         }
+
+        UpdateLevelTimer();
 
         if (IsMainMenuActive && Input.GetKeyDown(KeyCode.Return))
         {
@@ -201,6 +209,7 @@ public sealed class GameManager : MonoBehaviour
         isLevelComplete = false;
         isCampaignComplete = false;
         isRespawning = false;
+        gameOverPrompt = "Run ended";
         lastDeathFrame = -1;
         if (resetLives)
         {
@@ -208,6 +217,11 @@ public sealed class GameManager : MonoBehaviour
         }
 
         capturedPercentage = territoryManager != null ? territoryManager.CapturedPercentage : 0f;
+    }
+
+    private void ResetLevelTimer()
+    {
+        remainingTimerSeconds = Mathf.Max(0f, levelTimerSeconds);
     }
 
     private void LoadLevelFiles()
@@ -235,6 +249,8 @@ public sealed class GameManager : MonoBehaviour
 
         levelNumber = Mathf.Max(1, currentLevelData.levelNumber);
         requiredCapturePercentage = Mathf.Clamp(currentLevelData.requiredCapturePercentage, 1f, 100f);
+        levelTimerSeconds = Mathf.Max(0f, currentLevelData.timerSeconds);
+        ResetLevelTimer();
         gridManager?.ApplyLevelData(currentLevelData);
         FrameCameraToCurrentGrid();
 
@@ -503,6 +519,25 @@ public sealed class GameManager : MonoBehaviour
 #endif
     }
 
+    private void UpdateLevelTimer()
+    {
+        if (IsGameplayStopped || isRespawning || levelTimerSeconds <= 0f)
+        {
+            return;
+        }
+
+        remainingTimerSeconds = Mathf.Max(0f, remainingTimerSeconds - Time.deltaTime);
+        if (remainingTimerSeconds > 0f)
+        {
+            return;
+        }
+
+        isGameOver = true;
+        gameOverPrompt = "Time expired";
+        territoryManager?.CancelTemporaryPath();
+        Debug.Log("Game Over: time expired");
+    }
+
     private IEnumerator HandlePlayerDeathRoutine()
     {
         isRespawning = true;
@@ -547,6 +582,7 @@ public sealed class GameManager : MonoBehaviour
         }
 
         ResetGameState(resetLives);
+        ResetLevelTimer();
         Debug.Log(resetLives ? "Level restarted" : "Level advanced placeholder");
     }
 

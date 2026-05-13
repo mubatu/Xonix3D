@@ -9,6 +9,7 @@ public sealed class LevelData
     public int height = 40;
     public float cellSize = 1f;
     public float requiredCapturePercentage = 75f;
+    public float timerSeconds = 60f;
     public LevelCell playerSpawnCell = new LevelCell { x = 20, y = 0 };
     public LevelClaimedArea[] initiallyClaimedAreas;
     public LevelCell[] initiallyClaimedCells;
