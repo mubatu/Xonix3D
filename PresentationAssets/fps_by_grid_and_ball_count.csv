@@ -1,0 +1,9 @@
+scenario_file,grid_size,grid_width,grid_height,total_cells,ball_count,avg_fps
+Scenario_40x40_025Balls.json,40x40,40,40,1600,25,746
+Scenario_40x40_100Balls.json,40x40,40,40,1600,100,219
+Scenario_40x40_200Balls.json,40x40,40,40,1600,200,68
+Scenario_40x40_400Balls.json,40x40,40,40,1600,400,17
+Scenario_80x80_025Balls.json,80x80,80,80,6400,25,759
+Scenario_80x80_100Balls.json,80x80,80,80,6400,100,211
+Scenario_80x80_200Balls.json,80x80,80,80,6400,200,70
+Scenario_80x80_400Balls.json,80x80,80,80,6400,400,18

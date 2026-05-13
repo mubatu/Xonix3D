@@ -1,0 +1,110 @@
+{
+  "levelNumber": 1,
+  "width": 20,
+  "height": 20,
+  "cellSize": 1.0,
+  "requiredCapturePercentage": 75.0,
+  "playerSpawnCell": {
+    "x": 10,
+    "y": 0
+  },
+  "initiallyClaimedAreas": [
+    { "x": 0, "y": 0, "width": 20, "height": 1 },
+    { "x": 0, "y": 19, "width": 20, "height": 1 },
+    { "x": 0, "y": 0, "width": 1, "height": 20 },
+    { "x": 19, "y": 0, "width": 1, "height": 20 }
+  ],
+  "initiallyClaimedCells": [],
+  "balls": [
+    {
+      "ballType": "Normal",
+      "spawnCell": { "x": 14, "y": 14 },
+      "direction": { "x": -0.856287, "y": 0.5165003 },
+      "speed": 10.0,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1.0
+    },
+    {
+      "ballType": "Normal",
+      "spawnCell": { "x": 6, "y": 12 },
+      "direction": { "x": 0.7976006, "y": 0.60318595 },
+      "speed": 10.0,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1.0
+    },
+    {
+      "ballType": "Normal",
+      "spawnCell": { "x": 10, "y": 10 },
+      "direction": { "x": -0.6507914, "y": -0.7592566 },
+      "speed": 10.0,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1.0
+    },
+    {
+      "ballType": "Normal",
+      "spawnCell": { "x": 16, "y": 6 },
+      "direction": { "x": 0.5165003, "y": -0.856287 },
+      "speed": 10.0,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1.0
+    },
+    {
+      "ballType": "Normal",
+      "spawnCell": { "x": 4, "y": 4 },
+      "direction": { "x": -0.60318595, "y": 0.7976006 },
+      "speed": 10.0,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1.0
+    },
+    {
+      "ballType": "Normal",
+      "spawnCell": { "x": 4, "y": 16 },
+      "direction": { "x": 0.7592566, "y": -0.6507914 },
+      "speed": 10.0,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1.0
+    },
+    {
+      "ballType": "Normal",
+      "spawnCell": { "x": 16, "y": 16 },
+      "direction": { "x": -0.7976006, "y": -0.60318595 },
+      "speed": 10.0,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1.0
+    },
+    {
+      "ballType": "Normal",
+      "spawnCell": { "x": 10, "y": 4 },
+      "direction": { "x": 0.60318595, "y": 0.7976006 },
+      "speed": 10.0,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1.0
+    },
+    {
+      "ballType": "Normal",
+      "spawnCell": { "x": 6, "y": 8 },
+      "direction": { "x": -0.5165003, "y": 0.856287 },
+      "speed": 10.0,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1.0
+    },
+    {
+      "ballType": "Normal",
+      "spawnCell": { "x": 14, "y": 8 },
+      "direction": { "x": 0.6507914, "y": -0.7592566 },
+      "speed": 10.0,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1.0
+    }
+  ]
+}
