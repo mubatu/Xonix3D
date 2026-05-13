@@ -14,6 +14,14 @@ public sealed class GameManager : MonoBehaviour
 
     [Header("Level Data")]
     [SerializeField] private string levelsResourceFolder = "Levels";
+    [SerializeField] private string playableLevelFilePrefix = "Level_";
+
+    [Header("Camera")]
+    [SerializeField] private bool autoFrameCameraToGrid = true;
+    [SerializeField] private Camera gameplayCamera;
+    [SerializeField] private float cameraHeightScale = 0.75f;
+    [SerializeField] private float cameraBackOffsetScale = 0.575f;
+    [SerializeField] private float minCameraHeight = 12f;
 
     [Header("State")]
     [SerializeField] private int startingLives = 3;
@@ -28,6 +36,11 @@ public sealed class GameManager : MonoBehaviour
     [SerializeField] private bool enableDebugShortcuts = true;
     [SerializeField] private KeyCode reloadLevelFromJsonKey = KeyCode.F8;
 
+    [Header("FPS Logging")]
+    [SerializeField] private bool enableFpsLogging = true;
+    [SerializeField] private float fpsLogInterval = 10f;
+    [SerializeField] private KeyCode logFpsNowKey = KeyCode.F7;
+
     private int lives;
     private bool hasStarted;
     private bool isGameOver;
@@ -39,6 +52,11 @@ public sealed class GameManager : MonoBehaviour
     private int lastDeathFrame = -1;
     private int currentLevelIndex;
     private TextAsset[] levelFiles;
+    private int fpsIntervalFrames;
+    private int fpsSessionFrames;
+    private float fpsIntervalElapsed;
+    private float fpsSessionElapsed;
+    private bool hasLoggedFinalFpsSample;
 
     public int StartingLives => startingLives;
     public int LevelNumber => levelNumber;
@@ -79,6 +97,8 @@ public sealed class GameManager : MonoBehaviour
 
     private void Update()
     {
+        UpdateFpsLogging();
+
         if (enableDebugShortcuts && Input.GetKeyDown(reloadLevelFromJsonKey))
         {
             ReloadCurrentLevelFromJson();
@@ -94,6 +114,85 @@ public sealed class GameManager : MonoBehaviour
         {
             StartNextLevel();
         }
+    }
+
+    private void UpdateFpsLogging()
+    {
+        if (!enableFpsLogging)
+        {
+            return;
+        }
+
+        if (Input.GetKeyDown(logFpsNowKey))
+        {
+            LogFpsSample("manual");
+            return;
+        }
+
+        if (IsGameplayStopped)
+        {
+            if (fpsSessionFrames > 0 && !hasLoggedFinalFpsSample)
+            {
+                LogFpsSample("final");
+                hasLoggedFinalFpsSample = true;
+            }
+
+            return;
+        }
+
+        hasLoggedFinalFpsSample = false;
+        float deltaTime = Time.unscaledDeltaTime;
+        if (deltaTime <= 0f)
+        {
+            return;
+        }
+
+        fpsIntervalElapsed += deltaTime;
+        fpsSessionElapsed += deltaTime;
+        fpsIntervalFrames++;
+        fpsSessionFrames++;
+
+        if (fpsIntervalElapsed >= Mathf.Max(1f, fpsLogInterval))
+        {
+            LogFpsSample("interval");
+            fpsIntervalElapsed = 0f;
+            fpsIntervalFrames = 0;
+        }
+    }
+
+    private void ResetFpsLogging()
+    {
+        fpsIntervalFrames = 0;
+        fpsSessionFrames = 0;
+        fpsIntervalElapsed = 0f;
+        fpsSessionElapsed = 0f;
+        hasLoggedFinalFpsSample = false;
+    }
+
+    private void LogFpsSample(string sampleType)
+    {
+        if (fpsSessionFrames == 0 || fpsSessionElapsed <= 0f)
+        {
+            Debug.Log("Xonix FPS: no gameplay samples recorded yet.");
+            return;
+        }
+
+        float intervalAverage = fpsIntervalElapsed > 0f ? fpsIntervalFrames / fpsIntervalElapsed : 0f;
+        float sessionAverage = fpsSessionFrames / fpsSessionElapsed;
+        int activeBallCount = GetActiveBallCount();
+        string intervalText = fpsIntervalFrames > 0 ? intervalAverage.ToString("F1") : "n/a";
+
+        Debug.Log(
+            "Xonix FPS: "
+            + $"sample={sampleType}, "
+            + $"level={levelNumber}, "
+            + $"grid={gridManager.Width}x{gridManager.Height}, "
+            + $"balls={activeBallCount}, "
+            + $"intervalAvg={intervalText}, "
+            + $"sessionAvg={sessionAverage:F1}, "
+            + $"sessionSeconds={fpsSessionElapsed:F1}, "
+            + $"sessionFrames={fpsSessionFrames}"
+        );
     }
 
     private void ResetGameState(bool resetLives)
@@ -113,7 +212,11 @@ public sealed class GameManager : MonoBehaviour
 
     private void LoadLevelFiles()
     {
-        levelFiles = Resources.LoadAll<TextAsset>(levelsResourceFolder);
+        TextAsset[] allLevelTextAssets = Resources.LoadAll<TextAsset>(levelsResourceFolder);
+        levelFiles = Array.FindAll(
+            allLevelTextAssets,
+            levelFile => levelFile != null && levelFile.name.StartsWith(playableLevelFilePrefix, StringComparison.OrdinalIgnoreCase)
+        );
         Array.Sort(levelFiles, CompareLevelAssets);
 
         if (levelFiles.Length == 0)
@@ -133,6 +236,7 @@ public sealed class GameManager : MonoBehaviour
         levelNumber = Mathf.Max(1, currentLevelData.levelNumber);
         requiredCapturePercentage = Mathf.Clamp(currentLevelData.requiredCapturePercentage, 1f, 100f);
         gridManager?.ApplyLevelData(currentLevelData);
+        FrameCameraToCurrentGrid();
 
         if (playerController != null && currentLevelData.playerSpawnCell != null)
         {
@@ -229,6 +333,34 @@ public sealed class GameManager : MonoBehaviour
         }
 
         balls = configuredBalls;
+    }
+
+    private void FrameCameraToCurrentGrid()
+    {
+        if (!autoFrameCameraToGrid || gridManager == null)
+        {
+            return;
+        }
+
+        if (gameplayCamera == null)
+        {
+            gameplayCamera = Camera.main != null ? Camera.main : FindFirstObjectByType<Camera>();
+        }
+
+        if (gameplayCamera == null)
+        {
+            return;
+        }
+
+        Vector3 arenaCenter = gridManager.GetArenaCenter();
+        float maxDimension = gridManager.GetArenaMaxDimension();
+        float cameraHeight = Mathf.Max(minCameraHeight, maxDimension * cameraHeightScale);
+        float cameraBackOffset = Mathf.Max(6f, maxDimension * cameraBackOffsetScale);
+
+        gameplayCamera.transform.SetPositionAndRotation(
+            new Vector3(arenaCenter.x, cameraHeight, arenaCenter.z - cameraBackOffset),
+            Quaternion.Euler(60f, 0f, 0f)
+        );
     }
 
     private BallController[] EnsureBallCount(int requestedCount)
@@ -403,6 +535,7 @@ public sealed class GameManager : MonoBehaviour
     private void RestartLevel(bool resetLives)
     {
         hasStarted = true;
+        ResetFpsLogging();
         RefreshBallReferencesIfNeeded();
         StopAllCoroutines();
         territoryManager?.ResetTerritory();
@@ -415,6 +548,25 @@ public sealed class GameManager : MonoBehaviour
 
         ResetGameState(resetLives);
         Debug.Log(resetLives ? "Level restarted" : "Level advanced placeholder");
+    }
+
+    private int GetActiveBallCount()
+    {
+        if (balls == null)
+        {
+            return 0;
+        }
+
+        int activeBallCount = 0;
+        foreach (BallController ball in balls)
+        {
+            if (ball != null && ball.isActiveAndEnabled)
+            {
+                activeBallCount++;
+            }
+        }
+
+        return activeBallCount;
     }
 
     public void HandleCaptureUpdated(float newCapturedPercentage)

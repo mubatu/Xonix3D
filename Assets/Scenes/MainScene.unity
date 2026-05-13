@@ -494,6 +494,11 @@ MonoBehaviour:
   ballsRoot: {fileID: 786304462}
   balls: []
   levelsResourceFolder: Levels
+  autoFrameCameraToGrid: 1
+  gameplayCamera: {fileID: 0}
+  cameraHeightScale: 0.75
+  cameraBackOffsetScale: 0.575
+  minCameraHeight: 12
   startingLives: 3
   levelNumber: 1
   respawnDelay: 0.55
@@ -501,6 +506,9 @@ MonoBehaviour:
   deathPopScale: 1
   enableDebugShortcuts: 1
   reloadLevelFromJsonKey: 289
+  enableFpsLogging: 1
+  fpsLogInterval: 10
+  logFpsNowKey: 284
 --- !u!4 &1078400846
 Transform:
   m_ObjectHideFlags: 0

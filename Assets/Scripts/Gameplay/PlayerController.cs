@@ -34,7 +34,7 @@ public sealed class PlayerController : MonoBehaviour
 
     public void ConfigureSpawn(Vector2Int newSpawnCell)
     {
-        spawnCell = newSpawnCell;
+        spawnCell = ResolveSpawnCell(newSpawnCell);
 
         if (hasInitialized && gridManager != null)
         {
@@ -65,6 +65,7 @@ public sealed class PlayerController : MonoBehaviour
         hasInitialized = true;
         ApplyColor();
 
+        spawnCell = ResolveSpawnCell(spawnCell);
         currentCell = spawnCell;
         targetCell = spawnCell;
         transform.position = GetPlayerWorldPosition(spawnCell);
@@ -94,6 +95,7 @@ public sealed class PlayerController : MonoBehaviour
         isMoving = false;
         activeDirection = Vector2Int.zero;
         queuedDrawingDirection = Vector2Int.zero;
+        spawnCell = ResolveSpawnCell(spawnCell);
         currentCell = spawnCell;
         targetCell = spawnCell;
         transform.position = GetPlayerWorldPosition(spawnCell);
@@ -273,6 +275,16 @@ public sealed class PlayerController : MonoBehaviour
     {
         Vector3 groundPosition = gridManager.GridToWorld(cell);
         return groundPosition + Vector3.up * groundOffset;
+    }
+
+    private Vector2Int ResolveSpawnCell(Vector2Int requestedCell)
+    {
+        if (gridManager == null)
+        {
+            return requestedCell;
+        }
+
+        return gridManager.FindNearestCellWithState(requestedCell, CellState.Claimed);
     }
 
     private void FaceDirection(Vector2Int direction, bool snap)

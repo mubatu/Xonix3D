@@ -109,7 +109,7 @@ public sealed class BallController : MonoBehaviour
 
     private void Start()
     {
-        transform.position = GetBallWorldPosition(spawnCell);
+        transform.position = GetBallWorldPosition(ResolveSpawnCell(spawnCell));
     }
 
     private void Update()
@@ -138,7 +138,7 @@ public sealed class BallController : MonoBehaviour
     {
         direction = initialDirection;
         NormalizeDirection();
-        transform.position = GetBallWorldPosition(spawnCell);
+        transform.position = GetBallWorldPosition(ResolveSpawnCell(spawnCell));
         trailRenderer?.Clear();
     }
 
@@ -151,7 +151,7 @@ public sealed class BallController : MonoBehaviour
 
         if (ballData.spawnCell != null)
         {
-            spawnCell = ballData.spawnCell.ToVector2Int();
+            spawnCell = ResolveSpawnCell(ballData.spawnCell.ToVector2Int());
         }
 
         if (ballData.direction != null)
@@ -169,7 +169,7 @@ public sealed class BallController : MonoBehaviour
 
         if (gridManager != null)
         {
-            transform.position = GetBallWorldPosition(spawnCell);
+            transform.position = GetBallWorldPosition(ResolveSpawnCell(spawnCell));
         }
 
         ApplyVisualStyle();
@@ -471,6 +471,16 @@ public sealed class BallController : MonoBehaviour
     {
         Vector3 groundPosition = gridManager.GridToWorld(cell);
         return groundPosition + Vector3.up * groundOffset;
+    }
+
+    private Vector2Int ResolveSpawnCell(Vector2Int requestedCell)
+    {
+        if (gridManager == null)
+        {
+            return requestedCell;
+        }
+
+        return gridManager.FindNearestCellWithState(requestedCell, CellState.Unclaimed, true);
     }
 
     private void NormalizeDirection()

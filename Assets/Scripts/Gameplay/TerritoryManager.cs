@@ -289,10 +289,10 @@ public sealed class TerritoryManager : MonoBehaviour
 
         if (shouldLogCaptureSample)
         {
-            LogCaptureProfileLastSample();
+            // LogCaptureProfileLastSample();
         }
 
-        Debug.Log($"Captured: {roundedCapturedPercentage}%");
+        // Debug.Log($"Captured: {roundedCapturedPercentage}%");
     }
 
     private void CompleteDamagedPath()

@@ -121,6 +121,86 @@ public sealed class GridManager : MonoBehaviour
         return new Vector3(gridPosition.x * cellSize, 0f, gridPosition.y * cellSize);
     }
 
+    public Vector2Int ClampToGrid(Vector2Int cell)
+    {
+        InitializeIfNeeded();
+
+        return new Vector2Int(
+            Mathf.Clamp(cell.x, 0, width - 1),
+            Mathf.Clamp(cell.y, 0, height - 1)
+        );
+    }
+
+    public Vector2Int ClampToPlayableArea(Vector2Int cell)
+    {
+        InitializeIfNeeded();
+
+        int minX = width > 2 ? 1 : 0;
+        int maxX = width > 2 ? width - 2 : width - 1;
+        int minY = height > 2 ? 1 : 0;
+        int maxY = height > 2 ? height - 2 : height - 1;
+
+        return new Vector2Int(
+            Mathf.Clamp(cell.x, minX, maxX),
+            Mathf.Clamp(cell.y, minY, maxY)
+        );
+    }
+
+    public Vector2Int FindNearestCellWithState(Vector2Int preferredCell, CellState targetState, bool preferPlayableArea = false)
+    {
+        InitializeIfNeeded();
+
+        Vector2Int fallbackCell = preferPlayableArea ? ClampToPlayableArea(preferredCell) : ClampToGrid(preferredCell);
+        if (GetCellState(fallbackCell) == targetState)
+        {
+            return fallbackCell;
+        }
+
+        Vector2Int nearestCell = fallbackCell;
+        int nearestDistance = int.MaxValue;
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                if (grid[x, y] != targetState)
+                {
+                    continue;
+                }
+
+                if (preferPlayableArea && IsBorderCell(x, y) && width > 2 && height > 2)
+                {
+                    continue;
+                }
+
+                int distance = Mathf.Abs(x - preferredCell.x) + Mathf.Abs(y - preferredCell.y);
+                if (distance >= nearestDistance)
+                {
+                    continue;
+                }
+
+                nearestDistance = distance;
+                nearestCell = new Vector2Int(x, y);
+            }
+        }
+
+        return nearestDistance == int.MaxValue ? fallbackCell : nearestCell;
+    }
+
+    public Vector3 GetArenaCenter()
+    {
+        InitializeIfNeeded();
+
+        return new Vector3((width - 1) * cellSize * 0.5f, 0f, (height - 1) * cellSize * 0.5f);
+    }
+
+    public float GetArenaMaxDimension()
+    {
+        InitializeIfNeeded();
+
+        return Mathf.Max(width, height) * cellSize;
+    }
+
     public bool IsInsideGrid(Vector2Int cell)
     {
         InitializeIfNeeded();
@@ -910,6 +990,11 @@ public sealed class GridManager : MonoBehaviour
     private bool IsInsideGridBounds(int x, int y)
     {
         return x >= 0 && x < width && y >= 0 && y < height;
+    }
+
+    private bool IsBorderCell(int x, int y)
+    {
+        return x == 0 || x == width - 1 || y == 0 || y == height - 1;
     }
 
     private static void DestroyChildren(Transform root)
