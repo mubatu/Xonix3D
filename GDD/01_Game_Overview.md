@@ -11,12 +11,13 @@ Create a playable Unity prototype of a 3D Xonix-style game with:
 - A rectangular arena
 - Claimed and unclaimed territory
 - A player moving smoothly in four directions while snapping to grid lines
-- Two scripted bouncing balls
+- JSON-configured bouncing balls
 - Temporary path drawing
 - Burning path danger when balls hit an active path
 - Area capture using grid/flood-fill logic
 - Lives and respawn system
 - Level completion based on captured percentage
+- Per-level countdown timer
 
 Graphics, animations, menus, and advanced visual polish are not the first priority. The first goal is to make the gameplay system work correctly.
 
@@ -40,6 +41,7 @@ Initial target:
 9. Captured territory becomes safe territory.
 10. If the path was damaged, red tiles break back to unclaimed territory and the surviving orange path tiles become claimed wall.
 11. When the required capture percentage is reached, the level is completed.
+12. If the level timer reaches zero before completion, the run enters game over.
 
 ## Design Pillars
 
@@ -67,11 +69,12 @@ The first prototype should include:
 
 - One level
 - One player
-- Two balls
+- Multiple level-configured balls
 - Claimed border
 - Unclaimed center area
 - Path drawing
 - Area capture
 - Health/lives
+- Per-level timer
 - Fixed camera
-- Basic UI for lives, rounded captured percentage, and required capture percentage
+- Basic UI for lives, level timer, rounded captured percentage, and required capture percentage

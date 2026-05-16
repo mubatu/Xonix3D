@@ -50,7 +50,7 @@ public enum CellState
 - Balls can collide with each other and bounce away from each other.
 - Balls should keep a constant speed unless level design says otherwise.
 - Ball speed does not increase based on captured percentage.
-- Level 1 contains two balls.
+- Level ball count and ball types come from level data.
 
 ### Normal Balls
 
@@ -87,6 +87,24 @@ When the player dies:
 If lives reach zero:
 
 - Game over state is triggered.
+
+## Timer Rule
+
+Each level defines a countdown timer in seconds.
+
+For Levels 1-3, the current value is:
+
+```text
+Timer: 60 seconds
+```
+
+The timer starts when gameplay starts for the level and resets when the level is restarted or advanced. The timer does not count down while gameplay is stopped by the main menu, level complete, campaign complete, game over, or respawn lock.
+
+If the timer reaches zero before the required capture percentage is reached:
+
+- Game over state is triggered.
+- Any active temporary path is cancelled.
+- The game over prompt should indicate that time expired.
 
 ## Path Completion Rule
 

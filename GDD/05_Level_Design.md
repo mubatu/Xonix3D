@@ -8,8 +8,9 @@ It contains:
 - Claimed outer border
 - Unclaimed center area
 - One player starting at the bottom border
-- Two balls moving inside the unclaimed area
+- Four normal balls and three EaterBalls moving inside the unclaimed area
 - Three lives
+- 60 second timer
 - Level completion by capture percentage
 
 ## Level 1 Recommended Settings
@@ -20,7 +21,9 @@ Grid height: 40
 Cell size: 1
 Initial lives: 3
 Required capture percentage: 75%
-Ball count: 2
+Timer: 60 seconds
+Normal ball count: 4
+EaterBall count: 3
 ```
 
 These numbers can be changed after testing.
@@ -60,22 +63,22 @@ The player should respawn here after death.
 
 ## Ball Spawns
 
-Level 1 contains two balls.
+Level 1 currently contains seven balls: four normal balls and three EaterBalls.
 
 Runtime balls should be spawned or configured from a shared `Ball` prefab. The level JSON defines how many balls exist and their per-level type, spawn, direction, speed, hit radius, player hit radius, and ground offset.
 
 Suggested positions:
 
 ```text
-Ball 1: left-middle area
-Ball 2: right-upper area
+Normal balls: distributed around the unclaimed center
+EaterBalls: placed away from the player spawn so the player has a short opening route
 ```
 
 Example:
 
 ```text
-Ball 1 spawn: (width * 0.30, height * 0.60)
-Ball 2 spawn: (width * 0.70, height * 0.70)
+Normal spawn: (width * 0.25, height * 0.25)
+Eater spawn: (width * 0.70, height * 0.45)
 ```
 
 ## Level 2 Overview
@@ -87,6 +90,7 @@ It contains:
 - Claimed outer border
 - Claimed center block
 - Three normal balls
+- 60 second timer
 - Player starting at the bottom border
 - Level completion by capture percentage
 
@@ -99,6 +103,7 @@ It contains:
 - Claimed outer border
 - Claimed center block
 - Three EaterBalls
+- 60 second timer
 - Player starting at the bottom border
 - Level completion by capture percentage
 
@@ -121,6 +126,10 @@ Increase the number of ball entries in the level JSON to make area capture more 
 ### Faster Balls
 
 Increase speed per level if needed. Ball speed should not increase dynamically as captured percentage rises.
+
+### Shorter Timers
+
+Lower `timerSeconds` in level JSON to create pressure without changing ball count or speed.
 
 ### Enemies in Claimed Territory
 

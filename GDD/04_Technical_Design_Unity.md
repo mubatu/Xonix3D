@@ -36,6 +36,7 @@ Responsibilities:
 - Handle game over
 - Handle level complete
 - Coordinate reset after death
+- Track and reset the per-level timer
 - Load level JSON files from `Assets/Resources/Levels`
 - Spawn or reuse balls from a shared ball prefab according to each level JSON
 
@@ -197,6 +198,7 @@ public class LevelData
     public int height;
     public float cellSize;
     public float requiredCapturePercentage;
+    public float timerSeconds;
     public LevelCell playerSpawnCell;
     public LevelClaimedArea[] initiallyClaimedAreas;
     public LevelCell[] initiallyClaimedCells;
@@ -213,6 +215,8 @@ public string ballType; // "Normal" or "Eater"
 Shared ball visuals and default behavior should live in a `Ball` prefab. Level JSON controls each runtime ball's type, spawn cell, direction, speed, hit radius, player hit radius, and ground offset.
 
 `BallController` should default missing or unknown `ballType` values to `Normal` so older level JSON files remain valid.
+
+`timerSeconds` controls the level countdown. `GameManager` should clamp it to zero or higher, reset the remaining time on level start/restart/advance, count down only during active gameplay, and trigger game over with a time-expired prompt when it reaches zero.
 
 ## Grid Cell State Enum
 

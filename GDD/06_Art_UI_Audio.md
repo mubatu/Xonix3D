@@ -97,14 +97,18 @@ Initial UI should show:
 - Rounded captured percentage
 - Required capture percentage
 - Level number
+- Remaining level time
 
 Example UI:
 
 ```text
 Lives: 3
 Level: 1
+Time: 01:00
 Captured: 24% / 75%
 ```
+
+In the current prototype HUD, the top-left frame shows the level number, timer, captured percentage, and capture progress bar. The top-right frame shows lives.
 
 ## Game State UI
 
@@ -128,6 +132,12 @@ Show:
 
 ```text
 Game Over
+```
+
+When the timer expires, the game over prompt should say:
+
+```text
+Time expired
 ```
 
 Possible buttons later:

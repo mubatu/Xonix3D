@@ -45,7 +45,7 @@ The game is visually 3D, but its core gameplay logic is based on a 2D grid proje
 - The initial claimed border and completed temporary path cells count toward captured percentage.
 - Damaged paths do not award flood-fill capture; red cells break back to unclaimed and surviving orange path cells become claimed.
 - Captured percentage is displayed as a rounded value, with the required percentage visible during gameplay.
-- Timer is skipped for now.
+- Levels can define a countdown timer; current playable levels use 60 seconds.
 - Player can only draw horizontal and vertical paths.
 - Ball movement and bounce are scripted, not physics-based.
 - Runtime balls should use a shared prefab, while level JSON controls spawn, direction, speed, and radius settings.

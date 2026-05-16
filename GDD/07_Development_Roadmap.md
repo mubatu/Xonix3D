@@ -172,4 +172,4 @@ Possible tasks:
 - Add claimed-territory enemies.
 - Add power-ups.
 - Add scoring.
-- Add timer.
+- Add timer variants, such as shorter challenge levels or bonus time pickups.
