@@ -1,5 +1,7 @@
 # Xonix3D
 
+<img width="506" height="160" alt="xonix3d-text-cropped" src="https://github.com/user-attachments/assets/2f150665-3736-477e-8812-7b57270dc0ed" />
+
 Xonix3D is a 3D version of the classic Xonix game.
 
 The project is inspired by the original Xonix game. The main idea is the same: the player moves on a grid, draws paths, captures empty areas, and avoids moving balls.
@@ -7,6 +9,8 @@ The project is inspired by the original Xonix game. The main idea is the same: t
 This project was developed for CmpE 485.
 
 ## Game Rules
+
+<img width="679" height="362" alt="in-game" src="https://github.com/user-attachments/assets/f4d5f027-415b-4b77-becb-e742c036a70e" />
 
 - The player can move with `W`, `A`, `S`, `D` or the arrow keys.
 - The player is safe while moving on claimed territory.
