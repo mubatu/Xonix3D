@@ -4,6 +4,14 @@ using UnityEngine.UI;
 
 public sealed class GameHud : MonoBehaviour
 {
+    private const float LivesPanelMinWidth = 250f;
+    private const float LivesPanelHeight = 58f;
+    private const float LivesLabelWidth = 86f;
+    private const float LivesRootX = 112f;
+    private const float LivesRightPadding = 20f;
+    private const float LifeHeartSize = 28f;
+    private const float LifeHeartSpacing = 34f;
+
     [Header("References")]
     [SerializeField] private GameManager gameManager;
 
@@ -88,18 +96,18 @@ public sealed class GameHud : MonoBehaviour
         livesPanel.anchorMax = new Vector2(1f, 1f);
         livesPanel.pivot = new Vector2(1f, 1f);
         livesPanel.anchoredPosition = new Vector2(-24f, -24f);
-        livesPanel.sizeDelta = new Vector2(250f, 58f);
+        livesPanel.sizeDelta = new Vector2(GetLivesPanelWidth(), LivesPanelHeight);
 
         Text livesLabel = CreateText("Lives Label", livesPanel, 20, FontStyle.Bold, TextAnchor.MiddleLeft);
-        SetRect(livesLabel.rectTransform, new Vector2(20f, -20f), new Vector2(86f, 28f), new Vector2(0f, 1f));
+        SetRect(livesLabel.rectTransform, new Vector2(20f, -20f), new Vector2(LivesLabelWidth, 28f), new Vector2(0f, 1f));
         livesLabel.text = "LIVES";
 
         RectTransform livesRoot = CreateRect("Lives", livesPanel);
         livesRoot.anchorMin = new Vector2(0f, 1f);
         livesRoot.anchorMax = new Vector2(0f, 1f);
         livesRoot.pivot = new Vector2(0f, 1f);
-        livesRoot.anchoredPosition = new Vector2(112f, -22f);
-        livesRoot.sizeDelta = new Vector2(120f, 28f);
+        livesRoot.anchoredPosition = new Vector2(LivesRootX, -22f);
+        livesRoot.sizeDelta = new Vector2(GetLivesRootWidth(), LifeHeartSize);
         BuildLifeHearts(livesRoot);
 
         captureFill = CreateImage("Capture Progress Fill", progressBack, progressFillColor);
@@ -129,10 +137,21 @@ public sealed class GameHud : MonoBehaviour
             heart.rectTransform.anchorMin = new Vector2(0f, 1f);
             heart.rectTransform.anchorMax = new Vector2(0f, 1f);
             heart.rectTransform.pivot = new Vector2(0f, 1f);
-            heart.rectTransform.anchoredPosition = new Vector2(i * 34f, 0f);
-            heart.rectTransform.sizeDelta = new Vector2(28f, 28f);
+            heart.rectTransform.anchoredPosition = new Vector2(i * LifeHeartSpacing, 0f);
+            heart.rectTransform.sizeDelta = new Vector2(LifeHeartSize, LifeHeartSize);
             lifeHearts[i] = heart;
         }
+    }
+
+    private float GetLivesPanelWidth()
+    {
+        return Mathf.Max(LivesPanelMinWidth, LivesRootX + GetLivesRootWidth() + LivesRightPadding);
+    }
+
+    private float GetLivesRootWidth()
+    {
+        int lifeCount = Mathf.Max(1, gameManager != null ? gameManager.StartingLives : 3);
+        return LifeHeartSize + (lifeCount - 1) * LifeHeartSpacing;
     }
 
     private void BuildMessagePanel()
