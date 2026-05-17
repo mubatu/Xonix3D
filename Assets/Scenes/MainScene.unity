@@ -345,6 +345,11 @@ MonoBehaviour:
   wallThickness: 0.5
   wallRoot: {fileID: 0}
   wallMaterial: {fileID: 0}
+  createBallPhysicsCellColliders: 1
+  ballPhysicsColliderHeight: 2.4
+  ballPhysicsColliderVerticalCenter: 1
+  ballPhysicsColliderCellScale: 1.02
+  ballPhysicsColliderRoot: {fileID: 0}
   capturePulseColor: {r: 0.64, g: 1, b: 0.34, a: 1}
   capturePulseDuration: 0.45
   capturePulseCount: 2
@@ -494,12 +499,13 @@ MonoBehaviour:
   ballsRoot: {fileID: 786304462}
   balls: []
   levelsResourceFolder: Levels
+  playableLevelFilePrefix: Level_
   autoFrameCameraToGrid: 1
   gameplayCamera: {fileID: 0}
   cameraHeightScale: 0.75
   cameraBackOffsetScale: 0.575
   minCameraHeight: 12
-  startingLives: 3
+  startingLives: 5
   levelNumber: 1
   respawnDelay: 0.55
   deathFlashCount: 4

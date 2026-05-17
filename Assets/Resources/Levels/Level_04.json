@@ -1,0 +1,137 @@
+{
+  "levelNumber": 4,
+  "width": 40,
+  "height": 40,
+  "cellSize": 1,
+  "requiredCapturePercentage": 75,
+  "timerSeconds": 60,
+  "playerSpawnCell": {
+    "x": 20,
+    "y": 0
+  },
+  "initiallyClaimedAreas": [
+    {
+      "x": 0,
+      "y": 0,
+      "width": 40,
+      "height": 1
+    },
+    {
+      "x": 0,
+      "y": 39,
+      "width": 40,
+      "height": 1
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 40
+    },
+    {
+      "x": 39,
+      "y": 0,
+      "width": 1,
+      "height": 40
+    },
+    {
+      "x": 16,
+      "y": 16,
+      "width": 8,
+      "height": 8
+    }
+  ],
+  "initiallyClaimedCells": [],
+  "balls": [
+    {
+      "ballType": "Normal",
+      "spawnCell": {
+        "x": 9,
+        "y": 10
+      },
+      "direction": {
+        "x": 0.7976006,
+        "y": 0.60318595
+      },
+      "speed": 10,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1
+    },
+    {
+      "ballType": "Normal",
+      "spawnCell": {
+        "x": 31,
+        "y": 11
+      },
+      "direction": {
+        "x": -0.856287,
+        "y": 0.5165003
+      },
+      "speed": 10,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1
+    },
+    {
+      "ballType": "Normal",
+      "spawnCell": {
+        "x": 11,
+        "y": 29
+      },
+      "direction": {
+        "x": 0.6507914,
+        "y": -0.7592566
+      },
+      "speed": 10.5,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1
+    },
+    {
+      "ballType": "Normal",
+      "spawnCell": {
+        "x": 30,
+        "y": 29
+      },
+      "direction": {
+        "x": -0.60318595,
+        "y": -0.7976006
+      },
+      "speed": 10.5,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1
+    },
+    {
+      "ballType": "Eater",
+      "spawnCell": {
+        "x": 20,
+        "y": 9
+      },
+      "direction": {
+        "x": 0.5165003,
+        "y": 0.856287
+      },
+      "speed": 9.5,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1
+    },
+    {
+      "ballType": "Eater",
+      "spawnCell": {
+        "x": 20,
+        "y": 31
+      },
+      "direction": {
+        "x": -0.7592566,
+        "y": -0.6507914
+      },
+      "speed": 9.5,
+      "hitRadius": 0.9,
+      "playerHitRadius": 0.9,
+      "groundOffset": 1
+    }
+  ]
+}
