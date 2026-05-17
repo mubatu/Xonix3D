@@ -43,8 +43,9 @@ public enum CellState
 ## Ball Rules
 
 - Normal ball movement is contained by unclaimed territory. EaterBalls also move in unclaimed territory, but can damage claimed cells on contact before bouncing away.
-- Balls use scripted movement, not Rigidbody physics.
-- Balls bounce when they hit claimed territory, arena boundaries, temporary path cells, or burning path cells.
+- Balls use Unity Rigidbody physics for movement and bounce direction.
+- Blocked grid cells are represented by generated physics colliders, with horizontal runs of adjacent blocked cells merged into larger BoxColliders for performance.
+- Balls bounce through PhysX contacts when they hit claimed territory, arena boundaries, temporary path cells, burning path cells, or other balls.
 - If a ball hits a temporary path, it ignites that path cell as `BurningPath` and bounces away.
 - If a ball hits an already burning path, it continues to bounce away without causing immediate player death.
 - Balls can collide with each other and bounce away from each other.

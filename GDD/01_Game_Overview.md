@@ -11,7 +11,7 @@ Create a playable Unity prototype of a 3D Xonix-style game with:
 - A rectangular arena
 - Claimed and unclaimed territory
 - A player moving smoothly in four directions while snapping to grid lines
-- JSON-configured bouncing balls
+- JSON-configured PhysX bouncing balls
 - Temporary path drawing
 - Burning path danger when balls hit an active path
 - Area capture using grid/flood-fill logic

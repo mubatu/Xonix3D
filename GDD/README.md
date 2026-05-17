@@ -47,7 +47,8 @@ The game is visually 3D, but its core gameplay logic is based on a 2D grid proje
 - Captured percentage is displayed as a rounded value, with the required percentage visible during gameplay.
 - Levels can define a countdown timer; current playable levels use 60 seconds.
 - Player can only draw horizontal and vertical paths.
-- Ball movement and bounce are scripted, not physics-based.
+- Ball movement and bounce use Unity Rigidbody physics.
+- Blocked grid cells generate ball physics colliders; adjacent blocked cells in the same row are merged into larger horizontal BoxColliders for performance.
 - Runtime balls should use a shared prefab, while level JSON controls spawn, direction, speed, and radius settings.
 - The game uses grid-based logic.
 - Ground should eventually look like a smooth single mesh.

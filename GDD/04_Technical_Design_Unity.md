@@ -152,13 +152,14 @@ void Respawn();
 
 Responsibilities:
 
-- Move ball using scripted velocity
+- Launch and maintain ball motion through Rigidbody velocity/forces
 - Bounce from blocked cells
 - Bounce from temporary path cells after notifying `TerritoryManager` to ignite the path
 - Support normal ball and EaterBall behavior
 - For EaterBalls, destroy up to two claimed cells on contact and then bounce away
-- Use a forward wall/path probe distance to reduce visible overlap before bounce
-- Bounce from other balls
+- Use Rigidbody and SphereCollider contacts for ball bounce direction
+- Maintain X/Z-plane motion and constant level-defined speed without scripted reflection
+- Bounce from other balls through PhysX contacts
 - Notify GameManager if the vulnerable player is hit
 
 Suggested fields:
@@ -167,7 +168,8 @@ Suggested fields:
 public float speed = 4f;
 public Vector2 direction;
 public float hitRadius = 0.5f;
-public float wallProbeDistance = 0.45f;
+public float mass = 1f;
+public float bounciness = 1f;
 public BallType ballType;
 public Material normalBallMaterial;
 public Material eaterBallMaterial;
@@ -285,16 +287,18 @@ Generate clean procedural meshes for territory regions.
 
 ## Collision Approach
 
-Do not rely on Unity physics for core gameplay logic.
+Use a hybrid model:
 
-Use grid and distance checks instead:
+- Grid state remains the source of truth for territory, capture, level rules, and path ownership.
+- Unity PhysX is the source of truth for ball movement contacts and bounce direction.
+- `GridManager` converts blocked grid states into real BoxColliders.
+- Adjacent blocked cells in the same row should be merged into horizontal collider runs to reduce collider count and physics overhead.
+- Ball vs temporary path: PhysX contact resolves the touched grid cell, then `TerritoryManager.HandleBallTouchedPath` starts burning-path logic.
+- Ball vs claimed territory: PhysX contact blocks normal balls; EaterBalls convert up to two contacted claimed cells back to unclaimed.
+- Ball vs player may remain distance-based for responsive vulnerable-player death checks.
+- Ball vs ball should use Rigidbody/SphereCollider contact response rather than scripted direction reflection.
 
-- Ball vs wall: grid state check
-- Ball vs temporary path: grid probe plus `TerritoryManager.HandleBallTouchedPath`
-- Ball vs player: distance check
-- Ball vs ball: distance check and scripted direction reflection
-
-Unity colliders may still be used for visual debugging, but they should not be the source of truth.
+Unity colliders are not just visual debugging in this approach; they are the runtime collision surface for balls. The grid still decides what those colliders mean.
 
 ## Camera
 

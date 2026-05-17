@@ -73,18 +73,21 @@ Deliverable:
 
 ## Phase 5 - Ball Movement
 
-Goal: Add two scripted balls.
+Goal: Add two PhysX-driven balls.
 
 Tasks:
 
 - Add ball objects.
 - Create a reusable `Ball` prefab for shared visuals and default movement settings.
 - Implement `BallController`.
+- Add Rigidbody, SphereCollider, and bouncy low-friction physics material setup.
+- Generate ball-blocking colliders from blocked grid cells.
+- Merge adjacent blocked cells in each row into horizontal BoxCollider runs for performance.
 - Give each ball initial direction and speed.
 - Move balls continuously.
 - Bounce balls from claimed cells and arena bounds.
 - Bounce balls from temporary path cells after notifying the path danger system.
-- Bounce balls away from each other when they collide.
+- Bounce balls away from each other through Rigidbody/SphereCollider contacts.
 - Keep balls inside unclaimed territory.
 
 Deliverable:

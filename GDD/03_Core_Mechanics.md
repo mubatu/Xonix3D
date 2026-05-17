@@ -201,42 +201,45 @@ It cannot pass through:
 
 ## Ball Movement
 
-Balls should move with a scripted velocity.
+Balls use Unity Rigidbody physics for continuous movement and bounce direction.
 
 Each ball has:
 
 ```csharp
-Vector2 gridDirection;
+Vector2 launchDirection;
 float speed;
+Rigidbody rigidbody;
+SphereCollider sphereCollider;
+PhysicMaterial bouncyMaterial;
 ```
 
-The visible ball object moves in Unity X/Z according to its logical 2D direction.
-
-Recommended first version:
-
-- Ball position can be continuous, not cell-by-cell.
-- Each frame, calculate the next position.
-- Convert next position to grid coordinate.
-- If the next cell is blocked, reflect the direction.
+The visible ball object moves on Unity's X/Z plane. The Rigidbody is launched from level-defined direction and speed, gravity is disabled, Y movement is frozen, and the ball uses a low-friction, high-bounce PhysicMaterial. The game may normalize planar speed after physics updates to preserve Xonix-style constant-speed behavior, but it should not calculate custom bounce reflection.
 
 ## Ball Bounce Logic
 
-A ball should bounce when its next position would enter:
+Ball bounce direction should come from PhysX contacts.
 
-- Claimed territory
-- Outside arena bounds
-- Temporary path territory, after igniting the touched path cell
-- Burning path territory
+A ball should bounce when it contacts:
+
+- Claimed territory colliders
+- Arena boundary colliders
+- Temporary path colliders, after igniting the touched path cell
+- Burning path colliders
 - Another ball
 
-Recommended simple reflection:
+The grid still owns territory state, capture, and level rules. Physics colliders are the runtime collision surface that makes those grid states tangible to the balls.
 
-```text
-If blocked horizontally, reverse x direction.
-If blocked vertically, reverse z direction.
-If blocked in both, reverse both.
-If colliding with another ball, reflect both balls away from the collision normal.
-```
+### Blocked-Cell Physics Colliders
+
+`GridManager` should generate colliders for all cells that block ball movement:
+
+- `Claimed`
+- `TemporaryPath`
+- `BurningPath`
+
+For performance, adjacent blocked cells in the same row should be merged into horizontal BoxCollider runs instead of creating one collider per cell. For example, five consecutive claimed cells on row 12 should become one `BallPhysicsRun_12_start_end` collider, not five separate colliders.
+
+This keeps the collision model PhysX-native while reducing collider count, broadphase work, contact generation, and collider rebuild cost during captures.
 
 Balls do not get faster as captured percentage increases. Difficulty increases should come from level data, such as initial ball speed or ball count, not dynamic capture progress.
 
@@ -244,7 +247,7 @@ Balls do not get faster as captured percentage increases. Difficulty increases s
 
 EaterBalls are a special ball type configured in level JSON.
 
-When an EaterBall probes a `Claimed` cell:
+When an EaterBall contacts a `Claimed` cell:
 
 1. The contacted claimed cell is marked for destruction.
 2. One additional claimed cell in the bite direction is also marked when available.
@@ -256,17 +259,17 @@ EaterBalls do not eat temporary path or burning path cells. Those contacts follo
 
 ## Path Hit Detection And Burning Spread
 
-Each frame:
+On ball physics contact:
 
-1. Probe the ball's next movement against blocked grid states.
-2. If the probe touches `TemporaryPath`, notify `TerritoryManager`.
+1. Resolve the contact point and normal back to the touched grid cell.
+2. If the contact touches `TemporaryPath`, notify `TerritoryManager`.
 3. `TerritoryManager` ignites the related path cell as `BurningPath`.
-4. If the probe is from an EaterBall against claimed territory, destroy up to two claimed cells and recalculate captured percentage.
-5. The ball bounces away from the path or claimed-territory contact.
+4. If the contact is from an EaterBall against claimed territory, destroy up to two claimed cells and recalculate captured percentage.
+5. PhysX bounces the ball away from the path or claimed-territory contact.
 6. A timed spread coroutine expands burning path indices in both directions.
 7. If burning path reaches the player's current cell, trigger player death.
 
-This is more reliable than relying on Unity physics collisions.
+This keeps bounce physically consistent while preserving grid-based gameplay consequences.
 
 ## Player Hit Detection
 
