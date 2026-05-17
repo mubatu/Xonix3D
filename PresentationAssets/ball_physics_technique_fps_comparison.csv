@@ -1,0 +1,7 @@
+technique,grid_size,grid_width,grid_height,total_cells,ball_count,session_avg_fps
+PhysX merged horizontal colliders,40x40,40,40,1600,100,479.5
+PhysX merged horizontal colliders,80x80,80,80,6400,200,541.3
+PhysX merged horizontal colliders,80x80,80,80,6400,400,343.8
+Old sub-stepped probing,40x40,40,40,1600,100,226.6
+Old sub-stepped probing,80x80,80,80,6400,200,70.6
+Old sub-stepped probing,80x80,80,80,6400,400,18.6
