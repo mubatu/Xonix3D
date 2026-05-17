@@ -9,7 +9,6 @@ public enum BallType
 
 public sealed class BallController : MonoBehaviour
 {
-    private static readonly List<BallController> ActiveBalls = new();
     private const int EaterDestroyedCellCount = 2;
 
     [Header("References")]
@@ -27,8 +26,12 @@ public sealed class BallController : MonoBehaviour
     [SerializeField] private Vector2 direction = new Vector2(1f, 1f);
     [SerializeField] private float hitRadius = 0.45f;
     [SerializeField] private float playerHitRadius = 0.45f;
-    [SerializeField] private float wallProbeDistance = 0.45f;
     [SerializeField] private BallType ballType = BallType.Normal;
+
+    [Header("Physics")]
+    [SerializeField] private float mass = 1f;
+    [SerializeField] private float bounciness = 1f;
+    [SerializeField] private CollisionDetectionMode collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
 
     [Header("Visuals")]
     [SerializeField] private Material normalBallMaterial;
@@ -39,34 +42,21 @@ public sealed class BallController : MonoBehaviour
     [SerializeField] private float trailTime = 0.35f;
     [SerializeField] private float trailStartWidth = 0.28f;
     [SerializeField] private float trailEndWidth = 0.02f;
-    [SerializeField] private float visualRadius = 0.5f;
 
     private Renderer ballRenderer;
+    private Rigidbody ballRigidbody;
+    private SphereCollider ballCollider;
+    private PhysicMaterial runtimePhysicsMaterial;
     private MaterialPropertyBlock propertyBlock;
     private Vector2 initialDirection;
     private TrailRenderer trailRenderer;
+    private bool wasGameplayStopped = true;
 
     public Vector2 Direction => direction;
     public float HitRadius => hitRadius;
     public Vector2Int CurrentCell => gridManager != null ? gridManager.WorldToGrid(transform.position) : spawnCell;
     public BallType BallType => ballType;
     public bool IsEater => ballType == BallType.Eater;
-
-    private readonly struct ProbeCollisionInfo
-    {
-        public ProbeCollisionInfo(bool isBlocked, bool touchedPath, Vector2Int pathCell, List<Vector2Int> claimedContacts)
-        {
-            IsBlocked = isBlocked;
-            TouchedPath = touchedPath;
-            PathCell = pathCell;
-            ClaimedContacts = claimedContacts;
-        }
-
-        public bool IsBlocked { get; }
-        public bool TouchedPath { get; }
-        public Vector2Int PathCell { get; }
-        public List<Vector2Int> ClaimedContacts { get; }
-    }
 
     private void Awake()
     {
@@ -95,21 +85,16 @@ public sealed class BallController : MonoBehaviour
         propertyBlock = new MaterialPropertyBlock();
         NormalizeDirection();
         initialDirection = direction;
+        EnsurePhysicsComponents();
+        ApplyColliderRadius();
         ApplyVisualStyle();
         EnsureTrail();
-    }
-
-    private void OnEnable()
-    {
-        if (!ActiveBalls.Contains(this))
-        {
-            ActiveBalls.Add(this);
-        }
     }
 
     private void Start()
     {
         transform.position = GetBallWorldPosition(ResolveSpawnCell(spawnCell));
+        ResetPhysicsMotion();
     }
 
     private void Update()
@@ -119,19 +104,35 @@ public sealed class BallController : MonoBehaviour
             return;
         }
 
-        MoveBall();
-        CheckBallCollisions();
         CheckPlayerHit();
     }
 
-    private void OnDisable()
+    private void FixedUpdate()
     {
-        ActiveBalls.Remove(this);
+        EnsurePhysicsComponents();
+
+        if (gameManager != null && gameManager.IsGameplayStopped)
+        {
+            StopPhysicsMotion();
+            wasGameplayStopped = true;
+            return;
+        }
+
+        if (wasGameplayStopped)
+        {
+            ResetPhysicsMotion();
+            wasGameplayStopped = false;
+        }
+
+        MaintainFixedPhysicsSpeed();
+        ApplyRollingAngularVelocity();
+        SyncDirectionFromVelocity();
     }
 
     private void OnValidate()
     {
         NormalizeDirection();
+        ApplyColliderRadius();
     }
 
     public void ResetBall()
@@ -139,6 +140,7 @@ public sealed class BallController : MonoBehaviour
         direction = initialDirection;
         NormalizeDirection();
         transform.position = GetBallWorldPosition(ResolveSpawnCell(spawnCell));
+        ResetPhysicsMotion();
         trailRenderer?.Clear();
     }
 
@@ -166,163 +168,227 @@ public sealed class BallController : MonoBehaviour
         groundOffset = ballData.groundOffset;
         NormalizeDirection();
         initialDirection = direction;
+        ApplyColliderRadius();
 
         if (gridManager != null)
         {
             transform.position = GetBallWorldPosition(ResolveSpawnCell(spawnCell));
         }
 
+        ResetPhysicsMotion();
         ApplyVisualStyle();
         trailRenderer?.Clear();
     }
 
-    private void MoveBall()
+    private void EnsurePhysicsComponents()
     {
-        if (gridManager == null)
+        if (ballRigidbody == null)
         {
-            return;
+            ballRigidbody = GetComponent<Rigidbody>();
+            if (ballRigidbody == null)
+            {
+                ballRigidbody = gameObject.AddComponent<Rigidbody>();
+            }
         }
 
-        float frameDistance = speed * Time.deltaTime;
-        if (frameDistance <= 0f)
+        if (ballCollider == null)
         {
-            return;
+            ballCollider = GetComponent<SphereCollider>();
+            if (ballCollider == null)
+            {
+                ballCollider = gameObject.AddComponent<SphereCollider>();
+            }
         }
 
-        float maxStepDistance = Mathf.Max(0.05f, gridManager.CellSize * 0.25f);
-        int stepCount = Mathf.Max(1, Mathf.CeilToInt(frameDistance / maxStepDistance));
-        float stepDistance = frameDistance / stepCount;
+        runtimePhysicsMaterial ??= CreatePhysicsMaterial();
+        ballCollider.isTrigger = false;
+        ballCollider.material = runtimePhysicsMaterial;
 
-        for (int i = 0; i < stepCount; i++)
-        {
-            Vector3 stepMovement = new Vector3(direction.x, 0f, direction.y) * stepDistance;
-            MoveBallStep(stepMovement);
-        }
+        ballRigidbody.useGravity = false;
+        ballRigidbody.mass = Mathf.Max(0.01f, mass);
+        ballRigidbody.drag = 0f;
+        ballRigidbody.angularDrag = 0f;
+        ballRigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+        ballRigidbody.collisionDetectionMode = collisionDetectionMode;
+        ballRigidbody.constraints = RigidbodyConstraints.FreezePositionY;
+        ballRigidbody.freezeRotation = false;
+        ballRigidbody.maxAngularVelocity = Mathf.Max(7f, speed / Mathf.Max(0.01f, hitRadius) * 2f);
+        ballRigidbody.sleepThreshold = 0f;
     }
 
-    private void MoveBallStep(Vector3 movement)
+    private void ApplyColliderRadius()
     {
-        if (movement.sqrMagnitude < 0.000001f)
+        if (ballCollider == null)
         {
             return;
         }
 
-        Vector3 currentPosition = transform.position;
-        ProbeCollisionInfo currentCollision = GetProbeCollisionAt(currentPosition);
-        if (currentCollision.TouchedPath)
-        {
-            territoryManager?.HandleBallTouchedPath(currentCollision.PathCell);
-        }
-        DestroyClaimedContacts(currentCollision);
-
-        Vector3 nextPosition = currentPosition + movement;
-        ProbeCollisionInfo nextCollision = GetProbeCollisionAt(nextPosition);
-        if (!nextCollision.IsBlocked)
-        {
-            transform.position = nextPosition;
-            RollVisual(movement);
-            return;
-        }
-
-        if (nextCollision.TouchedPath)
-        {
-            territoryManager?.HandleBallTouchedPath(nextCollision.PathCell);
-        }
-
-        Vector3 lastSafePosition = FindLastSafePosition(currentPosition, movement);
-        Vector3 actualMovement = lastSafePosition - currentPosition;
-        if (actualMovement.sqrMagnitude > 0.000001f)
-        {
-            transform.position = lastSafePosition;
-            RollVisual(actualMovement);
-        }
-
-        ReflectFromCollision(currentPosition, movement);
-        DestroyClaimedContacts(nextCollision);
+        float maxScale = Mathf.Max(
+            Mathf.Abs(transform.lossyScale.x),
+            Mathf.Abs(transform.lossyScale.y),
+            Mathf.Abs(transform.lossyScale.z)
+        );
+        ballCollider.radius = Mathf.Max(0.01f, hitRadius / Mathf.Max(0.01f, maxScale));
+        ballCollider.center = Vector3.zero;
     }
 
-    private void ReflectFromCollision(Vector3 currentPosition, Vector3 movement)
+    private void ResetPhysicsMotion()
     {
-        ProbeCollisionInfo xCollision = GetProbeCollisionAt(currentPosition + new Vector3(movement.x, 0f, 0f), true, false);
-        ProbeCollisionInfo zCollision = GetProbeCollisionAt(currentPosition + new Vector3(0f, 0f, movement.z), false, true);
+        EnsurePhysicsComponents();
+        ApplyColliderRadius();
 
-        if (xCollision.TouchedPath)
+        Vector3 position = transform.position;
+        position.y = groundOffset;
+        transform.position = position;
+        ballRigidbody.position = position;
+        ballRigidbody.rotation = transform.rotation;
+
+        if (gameManager != null && gameManager.IsGameplayStopped)
         {
-            territoryManager?.HandleBallTouchedPath(xCollision.PathCell);
+            StopPhysicsMotion();
+            wasGameplayStopped = true;
+            return;
         }
 
-        if (zCollision.TouchedPath)
-        {
-            territoryManager?.HandleBallTouchedPath(zCollision.PathCell);
-        }
+        wasGameplayStopped = false;
+        LaunchPhysicsMotion();
+    }
 
-        bool blockedX = xCollision.IsBlocked;
-        bool blockedZ = zCollision.IsBlocked;
-
-        if (blockedX)
-        {
-            direction.x *= -1f;
-        }
-
-        if (blockedZ)
-        {
-            direction.y *= -1f;
-        }
-
-        if (!blockedX && !blockedZ)
-        {
-            direction *= -1f;
-        }
-
+    private void LaunchPhysicsMotion()
+    {
         NormalizeDirection();
+        ballRigidbody.velocity = Vector3.zero;
+        ballRigidbody.angularVelocity = Vector3.zero;
+        ballRigidbody.WakeUp();
+        ballRigidbody.AddForce(GetLaunchVelocity(), ForceMode.VelocityChange);
+        ApplyRollingAngularVelocity();
     }
 
-    private Vector3 FindLastSafePosition(Vector3 startPosition, Vector3 movement)
+    private void StopPhysicsMotion()
     {
-        float safeT = 0f;
-        float blockedT = 1f;
-
-        for (int i = 0; i < 8; i++)
+        if (ballRigidbody == null)
         {
-            float testT = (safeT + blockedT) * 0.5f;
-            Vector3 testPosition = startPosition + movement * testT;
-            if (GetProbeCollisionAt(testPosition).IsBlocked)
-            {
-                blockedT = testT;
-            }
-            else
-            {
-                safeT = testT;
-            }
+            return;
         }
 
-        return startPosition + movement * safeT;
+        ballRigidbody.velocity = Vector3.zero;
+        ballRigidbody.angularVelocity = Vector3.zero;
+        ballRigidbody.Sleep();
     }
 
-    private void CheckBallCollisions()
+    private Vector3 GetLaunchVelocity()
     {
-        foreach (BallController otherBall in ActiveBalls)
+        return new Vector3(direction.x, 0f, direction.y) * speed;
+    }
+
+    private void MaintainFixedPhysicsSpeed()
+    {
+        Vector3 planarVelocity = GetPlanarRigidbodyVelocity();
+        if (planarVelocity.sqrMagnitude < 0.0001f)
         {
-            if (otherBall == this)
+            planarVelocity = GetLaunchVelocity();
+        }
+
+        ballRigidbody.velocity = planarVelocity.normalized * speed;
+    }
+
+    private void ApplyRollingAngularVelocity()
+    {
+        Vector3 planarVelocity = GetPlanarRigidbodyVelocity();
+        if (planarVelocity.sqrMagnitude < 0.0001f)
+        {
+            ballRigidbody.angularVelocity = Vector3.zero;
+            return;
+        }
+
+        float rollingRadius = Mathf.Max(0.01f, hitRadius);
+        Vector3 rollingAxis = Vector3.Cross(Vector3.up, planarVelocity.normalized);
+        ballRigidbody.angularVelocity = rollingAxis * (planarVelocity.magnitude / rollingRadius);
+    }
+
+    private Vector3 GetPlanarRigidbodyVelocity()
+    {
+        Vector3 velocity = ballRigidbody.velocity;
+        return new Vector3(velocity.x, 0f, velocity.z);
+    }
+
+    private void SyncDirectionFromVelocity()
+    {
+        if (ballRigidbody == null)
+        {
+            return;
+        }
+
+        Vector2 planarVelocity = new Vector2(ballRigidbody.velocity.x, ballRigidbody.velocity.z);
+        if (planarVelocity.sqrMagnitude > 0.0001f)
+        {
+            direction = planarVelocity.normalized;
+        }
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        HandlePhysicsCollision(collision);
+    }
+
+    private void OnCollisionStay(Collision collision)
+    {
+        HandlePhysicsCollision(collision);
+    }
+
+    private void HandlePhysicsCollision(Collision collision)
+    {
+        List<Vector2Int> handledCells = null;
+
+        for (int i = 0; i < collision.contactCount; i++)
+        {
+            ContactPoint contact = collision.GetContact(i);
+            Collider otherCollider = contact.otherCollider;
+            if (otherCollider == null || otherCollider == ballCollider)
+            {
+                otherCollider = collision.collider;
+            }
+
+            GridCellPhysicsCollider cellCollider = otherCollider != null ? otherCollider.GetComponent<GridCellPhysicsCollider>() : null;
+            GridManager contactGridManager = cellCollider != null ? cellCollider.GridManager : null;
+            if (contactGridManager == null)
             {
                 continue;
             }
 
-            Vector2 toOther = GetXZ(otherBall.transform.position) - GetXZ(transform.position);
-            float minDistance = hitRadius + otherBall.hitRadius;
-            if (toOther.sqrMagnitude > minDistance * minDistance)
+            Vector2Int cell = contactGridManager.GetBallPhysicsContactCell(contact.point, contact.normal);
+            handledCells ??= new List<Vector2Int>();
+            if (handledCells.Contains(cell))
             {
                 continue;
             }
 
-            Vector2 normal = toOther.sqrMagnitude > 0.0001f ? toOther.normalized : Vector2.right;
-            direction = Vector2.Reflect(direction, -normal).normalized;
-            otherBall.direction = Vector2.Reflect(otherBall.direction, normal).normalized;
+            handledCells.Add(cell);
+            HandleGridCellPhysicsCollision(cell);
+        }
 
-            float overlap = minDistance - toOther.magnitude;
-            Vector3 separation = new Vector3(normal.x, 0f, normal.y) * (overlap * 0.5f);
-            transform.position -= separation;
-            otherBall.transform.position += separation;
+        MaintainFixedPhysicsSpeed();
+        ApplyRollingAngularVelocity();
+        SyncDirectionFromVelocity();
+    }
+
+    private void HandleGridCellPhysicsCollision(Vector2Int cell)
+    {
+        if (gridManager == null || !gridManager.IsInsideGrid(cell))
+        {
+            return;
+        }
+
+        CellState cellState = gridManager.GetCellState(cell);
+        if (cellState == CellState.TemporaryPath || cellState == CellState.BurningPath)
+        {
+            territoryManager?.HandleBallTouchedPath(cell);
+            return;
+        }
+
+        if (cellState == CellState.Claimed && IsEater)
+        {
+            DestroyClaimedContactCells(cell);
         }
     }
 
@@ -346,95 +412,23 @@ public sealed class BallController : MonoBehaviour
         }
     }
 
-    private ProbeCollisionInfo GetProbeCollisionAt(Vector3 worldPosition, bool checkX = true, bool checkZ = true)
+    private void DestroyClaimedContactCells(Vector2Int contactCell)
     {
-        bool isBlocked = false;
-        bool touchedPath = false;
-        Vector2Int pathCell = Vector2Int.zero;
-        List<Vector2Int> claimedContacts = null;
-        float probeDistance = GetWallProbeDistance();
-
-        if (checkX && Mathf.Abs(direction.x) > 0.0001f)
-        {
-            Vector2Int xCell = GetCellAt(worldPosition + new Vector3(Mathf.Sign(direction.x) * probeDistance, 0f, 0f));
-            CellState xState = gridManager.GetCellState(xCell);
-            Vector2Int biteDirection = new Vector2Int(GetDirectionSign(direction.x), 0);
-            CaptureProbeContact(xState, xCell, biteDirection, ref touchedPath, ref pathCell, ref claimedContacts, ref isBlocked);
-        }
-
-        if (checkZ && Mathf.Abs(direction.y) > 0.0001f)
-        {
-            Vector2Int zCell = GetCellAt(worldPosition + new Vector3(0f, 0f, Mathf.Sign(direction.y) * probeDistance));
-            CellState zState = gridManager.GetCellState(zCell);
-            Vector2Int biteDirection = new Vector2Int(0, GetDirectionSign(direction.y));
-            CaptureProbeContact(zState, zCell, biteDirection, ref touchedPath, ref pathCell, ref claimedContacts, ref isBlocked);
-        }
-
-        if (checkX && checkZ && Mathf.Abs(direction.x) > 0.0001f && Mathf.Abs(direction.y) > 0.0001f)
-        {
-            Vector3 diagonalProbe = worldPosition + new Vector3(
-                Mathf.Sign(direction.x) * probeDistance,
-                0f,
-                Mathf.Sign(direction.y) * probeDistance
-            );
-            Vector2Int diagonalCell = GetCellAt(diagonalProbe);
-            CellState diagonalState = gridManager.GetCellState(diagonalCell);
-            Vector2Int biteDirection = new Vector2Int(GetDirectionSign(direction.x), GetDirectionSign(direction.y));
-            CaptureProbeContact(diagonalState, diagonalCell, biteDirection, ref touchedPath, ref pathCell, ref claimedContacts, ref isBlocked);
-        }
-
-        return new ProbeCollisionInfo(isBlocked, touchedPath, pathCell, claimedContacts);
-    }
-
-    private Vector2Int GetCellAt(Vector3 worldPosition)
-    {
-        return gridManager.WorldToGrid(worldPosition);
-    }
-
-    private void CaptureProbeContact(
-        CellState cellState,
-        Vector2Int cell,
-        Vector2Int biteDirection,
-        ref bool touchedPath,
-        ref Vector2Int pathCell,
-        ref List<Vector2Int> claimedContacts,
-        ref bool isBlocked)
-    {
-        if (cellState == CellState.Unclaimed)
+        if (!IsEater || gridManager == null)
         {
             return;
         }
 
-        if (cellState == CellState.Claimed && IsEater && gridManager.IsInsideGrid(cell))
+        List<Vector2Int> contactCells = new() { contactCell };
+        Vector2Int biteDirection = GetPrimaryBiteDirection();
+        Vector2Int nextCell = contactCell + biteDirection;
+        if (biteDirection != Vector2Int.zero && !contactCells.Contains(nextCell))
         {
-            AddClaimedContact(cell, ref claimedContacts);
-            AddClaimedContact(cell + biteDirection, ref claimedContacts);
-            isBlocked = true;
-            return;
-        }
-
-        isBlocked = true;
-
-        if (cellState == CellState.TemporaryPath || cellState == CellState.BurningPath)
-        {
-            if (!touchedPath)
-            {
-                pathCell = cell;
-            }
-
-            touchedPath = true;
-        }
-    }
-
-    private void DestroyClaimedContacts(ProbeCollisionInfo collisionInfo)
-    {
-        if (!IsEater || collisionInfo.ClaimedContacts == null || collisionInfo.ClaimedContacts.Count == 0 || gridManager == null)
-        {
-            return;
+            contactCells.Add(nextCell);
         }
 
         List<Vector2Int> destroyedCells = new();
-        foreach (Vector2Int cell in collisionInfo.ClaimedContacts)
+        foreach (Vector2Int cell in contactCells)
         {
             if (destroyedCells.Count >= EaterDestroyedCellCount)
             {
@@ -453,18 +447,14 @@ public sealed class BallController : MonoBehaviour
         territoryManager?.HandleClaimedCellsDestroyed(destroyedCells);
     }
 
-    private static void AddClaimedContact(Vector2Int cell, ref List<Vector2Int> claimedContacts)
+    private Vector2Int GetPrimaryBiteDirection()
     {
-        claimedContacts ??= new List<Vector2Int>();
-        if (!claimedContacts.Contains(cell))
+        if (Mathf.Abs(direction.x) >= Mathf.Abs(direction.y))
         {
-            claimedContacts.Add(cell);
+            return new Vector2Int(GetDirectionSign(direction.x), 0);
         }
-    }
 
-    private float GetWallProbeDistance()
-    {
-        return Mathf.Clamp(wallProbeDistance, 0.01f, gridManager.CellSize * 0.49f);
+        return new Vector2Int(0, GetDirectionSign(direction.y));
     }
 
     private Vector3 GetBallWorldPosition(Vector2Int cell)
@@ -561,18 +551,6 @@ public sealed class BallController : MonoBehaviour
         trailRenderer.endColor = endColor;
     }
 
-    private void RollVisual(Vector3 movement)
-    {
-        if (ballRenderer == null || movement.sqrMagnitude < 0.0001f)
-        {
-            return;
-        }
-
-        Vector3 axis = Vector3.Cross(Vector3.up, movement.normalized);
-        float degrees = movement.magnitude / Mathf.Max(0.01f, visualRadius) * Mathf.Rad2Deg;
-        ballRenderer.transform.Rotate(axis, degrees, Space.World);
-    }
-
     private static Material CreateTrailMaterial()
     {
         Shader shader = Shader.Find("Sprites/Default");
@@ -581,6 +559,18 @@ public sealed class BallController : MonoBehaviour
         shader ??= Shader.Find("Standard");
 
         return shader != null ? new Material(shader) : null;
+    }
+
+    private PhysicMaterial CreatePhysicsMaterial()
+    {
+        return new PhysicMaterial("Ball Physics Material")
+        {
+            dynamicFriction = 0f,
+            staticFriction = 0f,
+            bounciness = Mathf.Clamp01(bounciness),
+            frictionCombine = PhysicMaterialCombine.Minimum,
+            bounceCombine = PhysicMaterialCombine.Maximum
+        };
     }
 
     private static Vector2 GetXZ(Vector3 position)
