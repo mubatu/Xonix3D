@@ -17,6 +17,7 @@ public sealed class GridManager : MonoBehaviour
     private static readonly ProfilerMarker CreatePathTileRendererMarker = new("Xonix.PathTiles.CreateRenderer");
     private static readonly ProfilerMarker ConfigurePathTileTransformMarker = new("Xonix.PathTiles.ConfigureTransform");
     private static readonly ProfilerMarker ResetPathTilePoolForProfilingMarker = new("Xonix.PathTiles.ResetPoolForProfiling");
+    private static readonly ProfilerMarker RebuildBallPhysicsCollidersMarker = new("Xonix.BallPhysics.RebuildCellColliders");
 
     [Header("Grid")]
     [SerializeField] private int width = 40;
@@ -767,71 +768,60 @@ public sealed class GridManager : MonoBehaviour
 
     private void RebuildBallPhysicsColliders()
     {
-        if (!createBallPhysicsCellColliders || grid == null)
+        using (RebuildBallPhysicsCollidersMarker.Auto())
         {
-            return;
-        }
-
-        CreateBallPhysicsColliderPool();
-
-        int colliderIndex = 0;
-        for (int y = 0; y < height; y++)
-        {
-            int x = 0;
-            while (x < width)
+            if (!createBallPhysicsCellColliders || grid == null)
             {
-                while (x < width && grid[x, y] == CellState.Unclaimed)
-                {
-                    x++;
-                }
+                return;
+            }
 
-                if (x >= width)
-                {
-                    break;
-                }
+            CreateBallPhysicsColliderPool();
 
-                int runStartX = x;
-                while (x < width && grid[x, y] != CellState.Unclaimed)
+            int colliderIndex = 0;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
                 {
-                    x++;
-                }
+                    if (grid[x, y] == CellState.Unclaimed)
+                    {
+                        continue;
+                    }
 
-                ConfigureBallPhysicsRunCollider(colliderIndex, runStartX, x - 1, y);
-                colliderIndex++;
+                    ConfigureBallPhysicsCellCollider(colliderIndex, x, y);
+                    colliderIndex++;
+                }
+            }
+
+            for (int i = colliderIndex; i < ballPhysicsCellColliders.Count; i++)
+            {
+                ballPhysicsCellColliders[i].gameObject.SetActive(false);
             }
         }
-
-        for (int i = colliderIndex; i < ballPhysicsCellColliders.Count; i++)
-        {
-            ballPhysicsCellColliders[i].gameObject.SetActive(false);
-        }
     }
 
-    private void ConfigureBallPhysicsRunCollider(int colliderIndex, int startX, int endX, int y)
+    private void ConfigureBallPhysicsCellCollider(int colliderIndex, int x, int y)
     {
-        BoxCollider runCollider = GetOrCreateBallPhysicsRunCollider(colliderIndex);
-        int runCellCount = endX - startX + 1;
-        float horizontalOverlap = Mathf.Max(1f, ballPhysicsColliderCellScale);
-        float sizeX = Mathf.Max(0.01f, runCellCount * cellSize + (horizontalOverlap - 1f) * cellSize);
-        float sizeZ = Mathf.Max(0.01f, cellSize * horizontalOverlap);
-        float centerX = (startX + endX) * cellSize * 0.5f;
+        BoxCollider cellCollider = GetOrCreateBallPhysicsCellCollider(colliderIndex);
+        float colliderScale = Mathf.Max(0.01f, ballPhysicsColliderCellScale);
+        float sizeXZ = Mathf.Max(0.01f, cellSize * colliderScale);
+        float centerX = x * cellSize;
         float centerZ = y * cellSize;
 
-        runCollider.transform.position = new Vector3(centerX, ballPhysicsColliderVerticalCenter, centerZ);
-        runCollider.transform.localScale = Vector3.one;
-        runCollider.size = new Vector3(sizeX, Mathf.Max(0.1f, ballPhysicsColliderHeight), sizeZ);
-        runCollider.gameObject.name = $"BallPhysicsRun_{y:00}_{startX:00}_{endX:00}";
-        runCollider.gameObject.SetActive(true);
+        cellCollider.transform.position = new Vector3(centerX, ballPhysicsColliderVerticalCenter, centerZ);
+        cellCollider.transform.localScale = Vector3.one;
+        cellCollider.size = new Vector3(sizeXZ, Mathf.Max(0.1f, ballPhysicsColliderHeight), sizeXZ);
+        cellCollider.gameObject.name = $"BallPhysicsCell_{y:00}_{x:00}";
+        cellCollider.gameObject.SetActive(true);
     }
 
-    private BoxCollider GetOrCreateBallPhysicsRunCollider(int colliderIndex)
+    private BoxCollider GetOrCreateBallPhysicsCellCollider(int colliderIndex)
     {
         if (colliderIndex < ballPhysicsCellColliders.Count)
         {
             return ballPhysicsCellColliders[colliderIndex];
         }
 
-        GameObject colliderObject = new GameObject("BallPhysicsRun");
+        GameObject colliderObject = new GameObject("BallPhysicsCell");
         colliderObject.transform.SetParent(ballPhysicsColliderRoot);
 
         GridCellPhysicsCollider cellInfo = colliderObject.AddComponent<GridCellPhysicsCollider>();
