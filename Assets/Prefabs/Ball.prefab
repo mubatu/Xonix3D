@@ -128,8 +128,10 @@ MonoBehaviour:
   direction: {x: 0.7976006, y: 0.60318595}
   hitRadius: 0.9
   playerHitRadius: 0.45
-  wallProbeDistance: 1
   ballType: 0
+  mass: 1
+  bounciness: 1
+  collisionDetectionMode: 2
   normalBallMaterial: {fileID: 2100000, guid: 29788143ee12648c7a6784df5e221fad, type: 2}
   eaterBallMaterial: {fileID: 2100000, guid: cfa4b3f7b738247f48576a4d05f89618, type: 2}
   overrideBallColor: 0
@@ -138,4 +140,3 @@ MonoBehaviour:
   trailTime: 0.35
   trailStartWidth: 0.28
   trailEndWidth: 0.02
-  visualRadius: 0.5

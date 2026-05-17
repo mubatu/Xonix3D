@@ -39,6 +39,13 @@ public sealed class GridManager : MonoBehaviour
     [SerializeField] private Transform wallRoot;
     [SerializeField] private Material wallMaterial;
 
+    [Header("Ball Physics")]
+    [SerializeField] private bool createBallPhysicsCellColliders = true;
+    [SerializeField] private float ballPhysicsColliderHeight = 2.4f;
+    [SerializeField] private float ballPhysicsColliderVerticalCenter = 1f;
+    [SerializeField] private float ballPhysicsColliderCellScale = 1.02f;
+    [SerializeField] private Transform ballPhysicsColliderRoot;
+
     [Header("Capture Feedback")]
     [SerializeField] private Color capturePulseColor = new Color(0.64f, 1f, 0.34f);
     [SerializeField] private float capturePulseDuration = 0.45f;
@@ -51,6 +58,7 @@ public sealed class GridManager : MonoBehaviour
 
     private CellState[,] grid;
     private Renderer[,] pathTileRenderers;
+    private readonly List<BoxCollider> ballPhysicsCellColliders = new();
     private Renderer[] wallRenderers;
     private MaterialPropertyBlock tilePropertyBlock;
     private Material fallbackMaterial;
@@ -63,6 +71,7 @@ public sealed class GridManager : MonoBehaviour
     private bool isInitialized;
     private bool groundVisualsCreated;
     private bool pathTilePoolCreated;
+    private bool ballPhysicsCollidersCreated;
     private bool wallsCreated;
     private bool groundMeshesDirty;
     private int pathTileProfileSamples;
@@ -233,6 +242,7 @@ public sealed class GridManager : MonoBehaviour
 
             grid[cell.x, cell.y] = state;
             RefreshCellVisual(cell);
+            RebuildBallPhysicsColliders();
         }
     }
 
@@ -272,6 +282,7 @@ public sealed class GridManager : MonoBehaviour
             }
 
             groundMeshesDirty = true;
+            RebuildBallPhysicsColliders();
         }
     }
 
@@ -280,6 +291,33 @@ public sealed class GridManager : MonoBehaviour
         InitializeIfNeeded();
 
         return !IsInsideGrid(cell) || GetCellState(cell) != CellState.Unclaimed;
+    }
+
+    public Vector2Int GetBallPhysicsContactCell(Vector3 contactPoint, Vector3 contactNormal)
+    {
+        InitializeIfNeeded();
+
+        Vector3 planarNormal = new Vector3(contactNormal.x, 0f, contactNormal.z);
+        if (planarNormal.sqrMagnitude < 0.0001f)
+        {
+            return FindNearestBlockedCell(WorldToGrid(contactPoint));
+        }
+
+        Vector3 normalizedNormal = planarNormal.normalized;
+        float sampleDistance = Mathf.Max(0.02f, cellSize * 0.25f);
+        Vector2Int inwardCell = WorldToGrid(contactPoint - normalizedNormal * sampleDistance);
+        if (IsInsideGrid(inwardCell) && GetCellState(inwardCell) != CellState.Unclaimed)
+        {
+            return inwardCell;
+        }
+
+        Vector2Int outwardCell = WorldToGrid(contactPoint + normalizedNormal * sampleDistance);
+        if (IsInsideGrid(outwardCell) && GetCellState(outwardCell) != CellState.Unclaimed)
+        {
+            return outwardCell;
+        }
+
+        return FindNearestBlockedCell(WorldToGrid(contactPoint));
     }
 
     public void ApplyLevelData(LevelData levelData)
@@ -304,6 +342,7 @@ public sealed class GridManager : MonoBehaviour
             ResetRuntimeVisuals();
             CreateGroundVisuals();
             CreatePathTilePool();
+            CreateBallPhysicsColliderPool();
             CreateArenaWallVisuals();
         }
 
@@ -386,6 +425,7 @@ public sealed class GridManager : MonoBehaviour
         isInitialized = true;
         CreateGroundVisuals();
         CreatePathTilePool();
+        CreateBallPhysicsColliderPool();
         CreateArenaWallVisuals();
         RefreshAllVisuals();
     }
@@ -498,9 +538,11 @@ public sealed class GridManager : MonoBehaviour
         HideCapturePulse();
         DestroyChildren(groundRoot);
         DestroyChildren(tileRoot);
+        DestroyChildren(ballPhysicsColliderRoot);
         DestroyChildren(wallRoot);
 
         pathTileRenderers = null;
+        ballPhysicsCellColliders.Clear();
         wallRenderers = null;
         claimedGroundMeshFilter = null;
         unclaimedGroundMeshFilter = null;
@@ -509,6 +551,7 @@ public sealed class GridManager : MonoBehaviour
 
         groundVisualsCreated = false;
         pathTilePoolCreated = false;
+        ballPhysicsCollidersCreated = false;
         wallsCreated = false;
         groundMeshesDirty = false;
     }
@@ -529,6 +572,23 @@ public sealed class GridManager : MonoBehaviour
 
         pathTileRenderers = new Renderer[width, height];
         pathTilePoolCreated = true;
+    }
+
+    private void CreateBallPhysicsColliderPool()
+    {
+        if (ballPhysicsCollidersCreated || !createBallPhysicsCellColliders)
+        {
+            return;
+        }
+
+        if (ballPhysicsColliderRoot == null)
+        {
+            GameObject rootObject = new GameObject("Ball Physics Cell Colliders");
+            rootObject.transform.SetParent(transform);
+            ballPhysicsColliderRoot = rootObject.transform;
+        }
+
+        ballPhysicsCollidersCreated = true;
     }
 
     private IEnumerator ResetPathTilePoolForProfilingRoutine()
@@ -633,10 +693,12 @@ public sealed class GridManager : MonoBehaviour
         {
             for (int y = 0; y < height; y++)
             {
-                RefreshCellVisual(new Vector2Int(x, y));
+                Vector2Int cell = new Vector2Int(x, y);
+                RefreshCellVisual(cell);
             }
         }
 
+        RebuildBallPhysicsColliders();
         RebuildGroundMeshes();
         groundMeshesDirty = false;
     }
@@ -701,6 +763,84 @@ public sealed class GridManager : MonoBehaviour
 
             groundMeshesDirty = true;
         }
+    }
+
+    private void RebuildBallPhysicsColliders()
+    {
+        if (!createBallPhysicsCellColliders || grid == null)
+        {
+            return;
+        }
+
+        CreateBallPhysicsColliderPool();
+
+        int colliderIndex = 0;
+        for (int y = 0; y < height; y++)
+        {
+            int x = 0;
+            while (x < width)
+            {
+                while (x < width && grid[x, y] == CellState.Unclaimed)
+                {
+                    x++;
+                }
+
+                if (x >= width)
+                {
+                    break;
+                }
+
+                int runStartX = x;
+                while (x < width && grid[x, y] != CellState.Unclaimed)
+                {
+                    x++;
+                }
+
+                ConfigureBallPhysicsRunCollider(colliderIndex, runStartX, x - 1, y);
+                colliderIndex++;
+            }
+        }
+
+        for (int i = colliderIndex; i < ballPhysicsCellColliders.Count; i++)
+        {
+            ballPhysicsCellColliders[i].gameObject.SetActive(false);
+        }
+    }
+
+    private void ConfigureBallPhysicsRunCollider(int colliderIndex, int startX, int endX, int y)
+    {
+        BoxCollider runCollider = GetOrCreateBallPhysicsRunCollider(colliderIndex);
+        int runCellCount = endX - startX + 1;
+        float horizontalOverlap = Mathf.Max(1f, ballPhysicsColliderCellScale);
+        float sizeX = Mathf.Max(0.01f, runCellCount * cellSize + (horizontalOverlap - 1f) * cellSize);
+        float sizeZ = Mathf.Max(0.01f, cellSize * horizontalOverlap);
+        float centerX = (startX + endX) * cellSize * 0.5f;
+        float centerZ = y * cellSize;
+
+        runCollider.transform.position = new Vector3(centerX, ballPhysicsColliderVerticalCenter, centerZ);
+        runCollider.transform.localScale = Vector3.one;
+        runCollider.size = new Vector3(sizeX, Mathf.Max(0.1f, ballPhysicsColliderHeight), sizeZ);
+        runCollider.gameObject.name = $"BallPhysicsRun_{y:00}_{startX:00}_{endX:00}";
+        runCollider.gameObject.SetActive(true);
+    }
+
+    private BoxCollider GetOrCreateBallPhysicsRunCollider(int colliderIndex)
+    {
+        if (colliderIndex < ballPhysicsCellColliders.Count)
+        {
+            return ballPhysicsCellColliders[colliderIndex];
+        }
+
+        GameObject colliderObject = new GameObject("BallPhysicsRun");
+        colliderObject.transform.SetParent(ballPhysicsColliderRoot);
+
+        GridCellPhysicsCollider cellInfo = colliderObject.AddComponent<GridCellPhysicsCollider>();
+        cellInfo.Configure(this);
+
+        BoxCollider cellCollider = colliderObject.AddComponent<BoxCollider>();
+        cellCollider.isTrigger = false;
+        ballPhysicsCellColliders.Add(cellCollider);
+        return cellCollider;
     }
 
     private Renderer CreatePathTileRenderer(Vector2Int cell)
@@ -995,6 +1135,39 @@ public sealed class GridManager : MonoBehaviour
     private bool IsBorderCell(int x, int y)
     {
         return x == 0 || x == width - 1 || y == 0 || y == height - 1;
+    }
+
+    private Vector2Int FindNearestBlockedCell(Vector2Int preferredCell)
+    {
+        Vector2Int clampedCell = ClampToGrid(preferredCell);
+        if (GetCellState(clampedCell) != CellState.Unclaimed)
+        {
+            return clampedCell;
+        }
+
+        Vector2Int nearestCell = clampedCell;
+        int nearestDistance = int.MaxValue;
+        for (int x = Mathf.Max(0, clampedCell.x - 1); x <= Mathf.Min(width - 1, clampedCell.x + 1); x++)
+        {
+            for (int y = Mathf.Max(0, clampedCell.y - 1); y <= Mathf.Min(height - 1, clampedCell.y + 1); y++)
+            {
+                if (grid[x, y] == CellState.Unclaimed)
+                {
+                    continue;
+                }
+
+                int distance = Mathf.Abs(x - preferredCell.x) + Mathf.Abs(y - preferredCell.y);
+                if (distance >= nearestDistance)
+                {
+                    continue;
+                }
+
+                nearestDistance = distance;
+                nearestCell = new Vector2Int(x, y);
+            }
+        }
+
+        return nearestCell;
     }
 
     private static void DestroyChildren(Transform root)
